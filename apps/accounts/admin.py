@@ -13,7 +13,7 @@ from .models import Appareil, CodeOTP, Organisation, ServiceMunicipal, Utilisate
 class UtilisateurCreationForm(BaseUserCreationForm):
     class Meta:
         model = Utilisateur
-        fields = ["telephone", "nom", "prenoms", "role", "service", "organisation"]
+        fields = ["telephone", "email", "nom", "prenoms", "role", "commune", "service", "organisation"]
 
 
 class UtilisateurChangeForm(UserChangeForm):
@@ -28,7 +28,7 @@ class UtilisateurAdmin(UserAdmin):
     add_form = UtilisateurCreationForm
 
     list_display = ["telephone", "nom", "prenoms", "role", "telephone_verifie", "is_active"]
-    list_filter = ["role", "telephone_verifie", "is_active", "is_staff"]
+    list_filter = ["role", "commune", "telephone_verifie", "is_active", "is_staff"]
     search_fields = ["telephone", "nom", "prenoms", "email"]
     ordering = ["nom", "prenoms"]
     list_select_related = ["service", "organisation"]
@@ -38,7 +38,7 @@ class UtilisateurAdmin(UserAdmin):
     fieldsets = [
         (None, {"fields": ["telephone", "password"]}),
         ("Identité", {"fields": ["nom", "prenoms", "email", "quartier_residence"]}),
-        ("Rôle", {"fields": ["role", "service", "organisation"]}),
+        ("Rôle", {"fields": ["role", "commune", "service", "organisation"]}),
         (
             "Statut et permissions",
             {
@@ -61,9 +61,11 @@ class UtilisateurAdmin(UserAdmin):
                 "classes": ["wide"],
                 "fields": [
                     "telephone",
+                    "email",
                     "nom",
                     "prenoms",
                     "role",
+                    "commune",
                     "service",
                     "organisation",
                     "password1",
@@ -185,8 +187,8 @@ class OrganisationAdmin(admin.ModelAdmin):
 
 @admin.register(ServiceMunicipal)
 class ServiceMunicipalAdmin(admin.ModelAdmin):
-    list_display = ["nom", "responsable", "actif"]
-    list_filter = ["actif"]
+    list_display = ["nom", "commune", "responsable", "actif"]
+    list_filter = ["commune", "actif"]
     search_fields = ["nom"]
     list_select_related = ["responsable"]
     autocomplete_fields = ["responsable"]

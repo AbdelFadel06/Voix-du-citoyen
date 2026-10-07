@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.codes_erreur import CodeErreur
+from apps.core.communes import commune_de_l_auteur, controler_quartier
 from apps.core.exceptions import ErreurMetier
 from apps.core.references import prochaine_reference
 from apps.medias import services as medias
@@ -61,7 +62,6 @@ def creer_signalement(
     titre="",
     description_texte="",
     description_audio_id=None,
-    anonyme=False,
     latitude=None,
     longitude=None,
     precision_gps=None,
@@ -72,9 +72,11 @@ def creer_signalement(
     Renvoie (signalement, avertissements) ; les avertissements n'empêchent pas la création.
     """
     avertissements = []
+    commune = commune_de_l_auteur(auteur)
+    controler_quartier(quartier, commune)
     if mode_localisation == Signalement.ModeLocalisation.GPS:
         latitude, longitude = _coordonnee(latitude), _coordonnee(longitude)
-        if not quartier.arrondissement.commune.contient(latitude, longitude):
+        if not commune.contient(latitude, longitude):
             raise ErreurMetier(CodeErreur.COORDONNEES_HORS_COMMUNE)
         if precision_gps > SEUIL_PRECISION_GPS_METRES:
             avertissements.append(
@@ -91,22 +93,27 @@ def creer_signalement(
     audio = medias.verifier_audio(auteur, description_audio_id) if description_audio_id else None
 
     titre = titre.strip()
+    # Les secteurs sont communs à toutes les communes : leur service par défaut n'est retenu
+    # que s'il appartient à la mairie de cette commune.
+    service = secteur.service_par_defaut
+    if service is not None and service.commune_id != commune.pk:
+        service = None
     signalement = Signalement.objects.create(
         reference=prochaine_reference(Signalement, PREFIXE_REFERENCE),
+        commune=commune,
         titre=titre or titre_genere(secteur, quartier),
         titre_genere=not titre,
         description_texte=description_texte.strip(),
         description_audio=audio,
         secteur=secteur,
         auteur=auteur,
-        anonyme=anonyme,
         mode_localisation=mode_localisation,
         latitude=latitude,
         longitude=longitude,
         precision_gps=precision_gps,
         quartier=quartier,
         repere=repere.strip(),
-        service_assigne=secteur.service_par_defaut,
+        service_assigne=service,
     )
     signalement.medias.set(photos_videos)
     medias.attacher([*photos_videos, *([audio] if audio else [])])
@@ -152,10 +159,10 @@ def changer_statut(signalement, *, par, statut, commentaire="", doublon_de=None)
                 CodeErreur.VALIDATION_ERREUR,
                 details={"doublon_de": ["Indiquez le signalement d'origine."]},
             )
-        if doublon_de.pk == signalement.pk or doublon_de.statut == Statut.DOUBLON:
+        if doublon_de.pk == signalement.pk or doublon_de.statut == Statut.DOUBLON or doublon_de.commune_id != signalement.commune_id:
             raise ErreurMetier(
                 CodeErreur.VALIDATION_ERREUR,
-                details={"doublon_de": ["Indiquez un autre signalement, qui ne soit pas lui-même un doublon."]},
+                details={"doublon_de": ["Indiquez un autre signalement de la même commune, qui ne soit pas lui-même un doublon."]},
             )
         signalement.doublon_de = doublon_de
         if not commentaire:
@@ -182,6 +189,12 @@ def assigner(signalement, *, par, service=None, agent=None):
     signalement = _verrouiller(signalement)
     if signalement.est_cloture:
         raise ErreurMetier(CodeErreur.SIGNALEMENT_CLOTURE)
+    for membre, champ in ((service, "service"), (agent, "agent")):
+        if membre is not None and membre.commune_id != signalement.commune_id:
+            raise ErreurMetier(
+                CodeErreur.VALIDATION_ERREUR,
+                details={champ: ["Ce dossier relève d'une autre commune que celle de ce service ou de cet agent."]},
+            )
     if agent is not None:
         if service is not None and agent.service_id != service.pk:
             raise ErreurMetier(

@@ -10,7 +10,7 @@ from apps.signalements.models import Signalement
 from apps.signalements.serializers import SignalementResumeSerializer
 from apps.suggestions.models import Suggestion
 from apps.territoire.models import Quartier
-from apps.territoire.serializers import QuartierResumeSerializer
+from apps.territoire.serializers import CommuneResumeSerializer, QuartierResumeSerializer
 
 from .models import Realisation, RealisationMedia
 
@@ -56,6 +56,7 @@ class CouvertureSerializer(serializers.Serializer):
 class RealisationListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
     champs_mairie = ("publie",)
 
+    commune = CommuneResumeSerializer(help_text="Commune de la réalisation.")
     secteur = SecteurResumeSerializer(help_text="Secteur de la réalisation.")
     quartiers = QuartierResumeSerializer(many=True, help_text="Quartiers concernés.")
     couverture = serializers.SerializerMethodField(
@@ -69,6 +70,7 @@ class RealisationListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "id",
             "reference",
             "titre",
+            "commune",
             "secteur",
             "statut",
             "taux_avancement",

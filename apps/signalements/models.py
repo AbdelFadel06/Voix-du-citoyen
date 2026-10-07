@@ -27,6 +27,13 @@ class Signalement(ModeleHorodate):
     STATUTS_CLOTURES = {Statut.RESOLU, Statut.REJETE, Statut.DOUBLON}
 
     reference = models.CharField("référence", max_length=20, unique=True, editable=False)
+    commune = models.ForeignKey(
+        "territoire.Commune",
+        on_delete=models.PROTECT,
+        related_name="signalements",
+        verbose_name="commune",
+        help_text="Commune de l'auteur au moment de l'envoi (déduite du compte, jamais envoyée).",
+    )
     titre = models.CharField("titre", max_length=150, blank=True)
     titre_genere = models.BooleanField("titre généré automatiquement", default=False)
     description_texte = models.TextField("description écrite", blank=True)
@@ -50,7 +57,6 @@ class Signalement(ModeleHorodate):
         related_name="signalements",
         verbose_name="auteur",
     )
-    anonyme = models.BooleanField("anonyme", default=False)
     mode_localisation = models.CharField(
         "mode de localisation", max_length=10, choices=ModeLocalisation.choices
     )

@@ -1,5 +1,6 @@
 import django_filters
 
+from apps.core.communes import FiltreCommune
 from apps.core.permissions import est_personnel_mairie
 
 from .models import Realisation
@@ -19,6 +20,7 @@ class RealisationFilter(django_filters.FilterSet):
     date_fin = django_filters.DateFilter(
         field_name="cree_le", lookup_expr="date__lte", help_text="Créées jusqu'à ce jour inclus (AAAA-MM-JJ)."
     )
+    commune = FiltreCommune()
     publie = django_filters.BooleanFilter(
         method="filtrer_publication",
         help_text="`false` : uniquement les brouillons. **Agents et admins uniquement** "
@@ -27,7 +29,7 @@ class RealisationFilter(django_filters.FilterSet):
 
     class Meta:
         model = Realisation
-        fields = ["statut", "secteur", "quartier", "date_debut", "date_fin", "publie"]
+        fields = ["statut", "secteur", "quartier", "date_debut", "date_fin", "publie", "commune"]
 
     def filtrer_publication(self, queryset, name, valeur):
         if valeur is None or not est_personnel_mairie(getattr(self.request, "user", None)):

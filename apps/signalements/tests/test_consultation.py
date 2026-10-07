@@ -38,33 +38,35 @@ def organisation(creer_utilisateur):
 
 
 class TestVisibiliteDeLAuteur:
-    def test_un_autre_citoyen_voit_le_nom_abrege(self, creer_signalement, citoyen, autre_citoyen, client_connecte):
+    """Les citoyens restent anonymes : seul l'auteur voit son identité, la mairie non plus."""
+
+    def test_un_autre_citoyen_ne_voit_pas_l_auteur(self, creer_signalement, citoyen, autre_citoyen, client_connecte):
         creer_signalement(citoyen)
         element = liste(client_connecte(autre_citoyen))["donnees"][0]
-        assert element["auteur"] == {
-            "nom_affiche": "Afiavi H.", "id": None, "nom": None, "prenoms": None, "telephone": None,
-        }
+        assert element["auteur"] is None
         assert element["est_auteur"] is False
         assert not CHAMPS_MAIRIE & element.keys()
 
-    def test_anonyme_masque_l_auteur_au_public(self, creer_signalement, citoyen, autre_citoyen, client_connecte):
-        creer_signalement(citoyen, anonyme=True)
-        assert liste(client_connecte(autre_citoyen))["donnees"][0]["auteur"] is None
-
-    def test_l_auteur_se_voit_en_entier_meme_anonyme(self, creer_signalement, citoyen, client_connecte):
-        creer_signalement(citoyen, anonyme=True)
+    def test_l_auteur_se_voit_en_entier(self, creer_signalement, citoyen, client_connecte):
+        creer_signalement(citoyen)
         element = liste(client_connecte(citoyen))["donnees"][0]
         assert element["auteur"]["telephone"] == str(citoyen.telephone)
         assert element["est_auteur"] is True
 
-    def test_la_mairie_voit_tout_meme_anonyme(self, creer_signalement, citoyen, agent, client_connecte, voirie):
-        creer_signalement(citoyen, anonyme=True)
-        element = liste(client_connecte(agent))["donnees"][0]
-        assert element["auteur"]["nom"] == "Hounkpatin"
-        assert element["auteur"]["telephone"] == str(citoyen.telephone)
+    def test_la_mairie_ne_voit_pas_l_auteur(self, creer_signalement, citoyen, agent, client_connecte, voirie):
+        creer_signalement(citoyen)
+        client = client_connecte(agent)
+        element = liste(client)["donnees"][0]
+        assert element["auteur"] is None
         assert element["priorite"] == "NORMALE"
         assert element["service_assigne"] == {"id": voirie.pk, "nom": voirie.nom}
-        assert element["agent_assigne"] is None
+        detail = client.get(url_detail(Signalement.objects.get())).json()["donnees"]
+        assert detail["auteur"] is None
+        # Le dépôt figure dans l'historique, sans le nom du citoyen.
+        assert detail["historique"][0]["nouveau_statut"] == "SOUMIS"
+        assert detail["historique"][0]["auteur_nom"] is None
+        for trace in (str(citoyen.telephone), citoyen.nom, citoyen.prenoms):
+            assert trace not in str(detail)
 
     def test_une_organisation_ne_voit_jamais_l_auteur(self, creer_signalement, citoyen, organisation, client_connecte):
         creer_signalement(citoyen)

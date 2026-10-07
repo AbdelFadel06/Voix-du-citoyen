@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from apps.referentiel.models import Secteur
 from apps.signalements.models import Signalement
-from apps.territoire.models import Arrondissement, Quartier
+from apps.territoire.models import Arrondissement, Commune, Quartier
 
 PERIODES = [("jour", "Jour"), ("semaine", "Semaine"), ("mois", "Mois")]
 MAX_POINTS_EVOLUTION = 400
@@ -16,6 +16,13 @@ MAX_POINTS_EVOLUTION = 400
 
 
 class FiltresSerializer(serializers.Serializer):
+    commune = serializers.PrimaryKeyRelatedField(
+        queryset=Commune.objects.all(),
+        required=False,
+        error_messages={"does_not_exist": "Cette commune n'existe pas."},
+        help_text="Commune à afficher. Pour les organisations et les admins de la plateforme ; "
+        "ignoré pour la mairie d'une commune, qui ne voit que la sienne.",
+    )
     date_debut = serializers.DateField(required=False, help_text="Dossiers créés à partir de ce jour (AAAA-MM-JJ).")
     date_fin = serializers.DateField(required=False, help_text="Dossiers créés jusqu'à ce jour inclus (AAAA-MM-JJ).")
     secteur = serializers.PrimaryKeyRelatedField(

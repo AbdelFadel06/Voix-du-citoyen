@@ -7,8 +7,8 @@ from django.utils import timezone
 from apps.accounts.models import CodeOTP, Organisation, Utilisateur
 from apps.accounts.services import suspendre_organisation
 from apps.core.codes_erreur import CodeErreur
-from apps.territoire.models import Arrondissement, Commune, Quartier
-from conftest import MOT_DE_PASSE
+from apps.territoire.models import Arrondissement, Quartier
+from conftest import MOT_DE_PASSE, commune_de_test
 
 pytestmark = pytest.mark.django_db
 
@@ -25,6 +25,7 @@ TELEPHONE = "+2290197123456"
 
 def donnees_inscription(**surcharges):
     return {
+        "commune": commune_de_test().pk,
         "telephone": "0197123456",
         "nom": "Hounkpatin",
         "prenoms": "Afiavi",
@@ -53,11 +54,7 @@ def faux_code(code):
 
 @pytest.fixture
 def quartier():
-    commune = Commune.objects.create(
-        nom="Abomey-Calavi", code="ABC", departement="Atlantique",
-        lat_min=6.38, lat_max=6.65, lng_min=2.23, lng_max=2.45,
-    )
-    arrondissement = Arrondissement.objects.create(commune=commune, nom="Godomey", code="GOD")
+    arrondissement = Arrondissement.objects.create(commune=commune_de_test(), nom="Godomey", code="GOD")
     return Quartier.objects.create(arrondissement=arrondissement, nom="Togoudo", code="TOG")
 
 
@@ -114,7 +111,7 @@ class TestInscription:
         )
         assert reponse.status_code == 201
         utilisateur = Utilisateur.objects.get(telephone=TELEPHONE)
-        assert utilisateur.email == "Afiavi@exemple.bj"
+        assert utilisateur.email == "afiavi@exemple.bj"
         assert utilisateur.quartier_residence == quartier
 
     @pytest.mark.parametrize("champ", ["telephone", "nom", "prenoms", "password"])
@@ -286,6 +283,10 @@ def connexion(client, telephone, password=MOT_DE_PASSE):
     return client.post(URL_LOGIN, {"telephone": telephone, "password": password}, format="json")
 
 
+def connexion_email(client, email, password=MOT_DE_PASSE):
+    return client.post(URL_LOGIN, {"email": email, "password": password}, format="json")
+
+
 class TestConnexion:
     def test_renvoie_les_jetons_et_le_profil(self, api_client, creer_utilisateur):
         utilisateur = creer_utilisateur(telephone=TELEPHONE)
@@ -332,26 +333,86 @@ class TestConnexion:
         erreur(reponse, CodeErreur.TELEPHONE_NON_VERIFIE)
 
     def test_agent_cree_par_l_admin_n_a_pas_besoin_d_otp(self, api_client, creer_utilisateur):
-        creer_utilisateur(role=Utilisateur.Role.AGENT, telephone=TELEPHONE, telephone_verifie=False)
-        assert connexion(api_client, TELEPHONE).status_code == 200
+        creer_utilisateur(role=Utilisateur.Role.AGENT, email="agent@mairie.bj", telephone_verifie=False)
+        assert connexion_email(api_client, "agent@mairie.bj").status_code == 200
 
     def test_organisation_suspendue_refusee(self, api_client, creer_utilisateur):
-        compte = creer_utilisateur(role=Utilisateur.Role.ORGANISATION, telephone=TELEPHONE)
+        compte = creer_utilisateur(role=Utilisateur.Role.ORGANISATION, email="ong@exemple.bj")
         suspendre_organisation(compte.organisation, "Rapport annuel non fourni")
-        reponse = connexion(api_client, TELEPHONE)
+        reponse = connexion_email(api_client, "ong@exemple.bj")
         assert reponse.status_code == 403
         erreur(reponse, CodeErreur.ORGANISATION_NON_HABILITEE)
 
     def test_organisation_expiree_refusee(self, api_client, creer_utilisateur):
-        compte = creer_utilisateur(role=Utilisateur.Role.ORGANISATION, telephone=TELEPHONE)
+        compte = creer_utilisateur(role=Utilisateur.Role.ORGANISATION, email="ong@exemple.bj")
         Organisation.objects.filter(pk=compte.organisation_id).update(
             date_expiration=timezone.localdate() - timedelta(days=1)
         )
-        assert connexion(api_client, TELEPHONE).status_code == 403
+        assert connexion_email(api_client, "ong@exemple.bj").status_code == 403
 
     def test_organisation_habilitee_acceptee(self, api_client, creer_utilisateur):
-        creer_utilisateur(role=Utilisateur.Role.ORGANISATION, telephone=TELEPHONE)
-        assert connexion(api_client, TELEPHONE).status_code == 200
+        creer_utilisateur(role=Utilisateur.Role.ORGANISATION, email="ong@exemple.bj")
+        assert connexion_email(api_client, "ong@exemple.bj").status_code == 200
+
+
+class TestConnexionParEmail:
+    @pytest.mark.parametrize("role", [Utilisateur.Role.AGENT, Utilisateur.Role.ADMIN_MAIRIE, Utilisateur.Role.ORGANISATION])
+    def test_le_personnel_se_connecte_par_email(self, api_client, creer_utilisateur, role):
+        compte = creer_utilisateur(role=role, email="Rodrigue.Ahouansou@Mairie-Parakou.bj")
+        reponse = connexion_email(api_client, "  rodrigue.ahouansou@mairie-parakou.BJ ")
+        assert reponse.status_code == 200, reponse.json()
+        assert donnees(reponse)["utilisateur"]["id"] == compte.pk
+
+    def test_le_personnel_ne_se_connecte_pas_par_telephone(self, api_client, creer_utilisateur):
+        creer_utilisateur(role=Utilisateur.Role.AGENT, telephone=TELEPHONE)
+        reponse = connexion(api_client, TELEPHONE)
+        assert reponse.status_code == 400
+        erreur(reponse, CodeErreur.CONNEXION_PAR_EMAIL)
+
+    def test_le_citoyen_ne_se_connecte_pas_par_email(self, api_client, creer_utilisateur):
+        creer_utilisateur(telephone=TELEPHONE, email="afiavi@exemple.bj")
+        reponse = connexion_email(api_client, "afiavi@exemple.bj")
+        assert reponse.status_code == 400
+        erreur(reponse, CodeErreur.CONNEXION_PAR_TELEPHONE)
+
+    def test_mauvaise_methode_et_mauvais_mot_de_passe_ne_revelent_rien(self, api_client, creer_utilisateur):
+        creer_utilisateur(role=Utilisateur.Role.AGENT, telephone=TELEPHONE, email="agent@mairie.bj")
+        erreur(connexion(api_client, TELEPHONE, "mauvais"), CodeErreur.IDENTIFIANTS_INVALIDES)
+        erreur(connexion_email(api_client, "agent@mairie.bj", "mauvais"), CodeErreur.IDENTIFIANTS_INVALIDES)
+        erreur(connexion_email(api_client, "inconnu@mairie.bj"), CodeErreur.IDENTIFIANTS_INVALIDES)
+
+    def test_compte_du_personnel_desactive(self, api_client, creer_utilisateur):
+        creer_utilisateur(role=Utilisateur.Role.AGENT, email="agent@mairie.bj", is_active=False)
+        reponse = connexion_email(api_client, "agent@mairie.bj")
+        assert reponse.status_code == 403
+        erreur(reponse, CodeErreur.COMPTE_DESACTIVE)
+
+    @pytest.mark.parametrize(
+        "corps",
+        [
+            {"password": MOT_DE_PASSE},
+            {"telephone": TELEPHONE, "email": "agent@mairie.bj", "password": MOT_DE_PASSE},
+        ],
+    )
+    def test_un_seul_identifiant(self, api_client, db, corps):
+        reponse = api_client.post(URL_LOGIN, corps, format="json")
+        assert "identifiant" in erreur(reponse, CodeErreur.VALIDATION_ERREUR)["details"]
+
+    def test_inscription_avec_un_email_deja_pris(self, api_client, sms, creer_utilisateur):
+        creer_utilisateur(role=Utilisateur.Role.AGENT, email="agent@mairie.bj")
+        reponse = api_client.post(URL_REGISTER, donnees_inscription(email="AGENT@mairie.bj"), format="json")
+        assert reponse.status_code == 409
+        erreur(reponse, CodeErreur.EMAIL_DEJA_UTILISE)
+
+    def test_le_personnel_ne_peut_pas_effacer_son_email(self, creer_utilisateur, client_connecte):
+        client = client_connecte(creer_utilisateur(role=Utilisateur.Role.AGENT))
+        reponse = client.patch(URL_ME, {"email": ""}, format="json")
+        assert "email" in erreur(reponse, CodeErreur.VALIDATION_ERREUR)["details"]
+
+    def test_email_du_profil_unique(self, creer_utilisateur, client_connecte):
+        creer_utilisateur(role=Utilisateur.Role.AGENT, email="agent@mairie.bj")
+        reponse = client_connecte(creer_utilisateur()).patch(URL_ME, {"email": "Agent@Mairie.bj"}, format="json")
+        assert "email" in erreur(reponse, CodeErreur.VALIDATION_ERREUR)["details"]
 
 
 class TestJetons:

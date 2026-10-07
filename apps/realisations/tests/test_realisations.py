@@ -15,6 +15,7 @@ from apps.realisations.models import Realisation, RealisationMedia
 from apps.referentiel.models import Secteur
 from apps.signalements import services as signalements
 from apps.territoire.models import Arrondissement, Quartier
+from conftest import commune_de_test
 
 pytestmark = pytest.mark.django_db
 
@@ -50,7 +51,7 @@ def quartier(commune):
 
 @pytest.fixture
 def agent(creer_utilisateur):
-    service = ServiceMunicipal.objects.create(nom="Voirie et assainissement")
+    service = ServiceMunicipal.objects.create(commune=commune_de_test(), nom="Voirie et assainissement")
     return creer_utilisateur(role=Utilisateur.Role.AGENT, service=service, nom="Ahouansou", prenoms="Rodrigue")
 
 

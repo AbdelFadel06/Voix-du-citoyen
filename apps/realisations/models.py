@@ -15,6 +15,12 @@ class Realisation(ModeleHorodate):
         SUSPENDUE = "SUSPENDUE", "Suspendue"
 
     reference = models.CharField("référence", max_length=20, unique=True, editable=False)
+    commune = models.ForeignKey(
+        "territoire.Commune",
+        on_delete=models.PROTECT,
+        related_name="realisations",
+        verbose_name="commune",
+    )
     titre = models.CharField("titre", max_length=200)
     description = models.TextField("description")
     secteur = models.ForeignKey(

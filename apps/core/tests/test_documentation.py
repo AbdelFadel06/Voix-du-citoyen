@@ -87,6 +87,8 @@ def test_les_endpoints_publics_ne_demandent_pas_de_jeton(schema):
         "POST /api/v1/auth/register/",
         "POST /api/v1/auth/otp/verify/",
         "POST /api/v1/auth/otp/resend/",
+        "POST /api/v1/auth/password/reset/",
+        "POST /api/v1/auth/password/reset/confirm/",
         "POST /api/v1/auth/login/",
         "POST /api/v1/auth/refresh/",
         "GET /api/v1/sante/",

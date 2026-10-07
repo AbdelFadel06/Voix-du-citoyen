@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import ScopedRateThrottle
 
 from apps.core.codes_erreur import CodeErreur
+from apps.core.communes import cloisonner
 from apps.core.permissions import EstAgentMairie, EstCitoyen, est_personnel_mairie
 from apps.core.reponses import reponse_succes
 from apps.core.schema import (
@@ -43,11 +44,11 @@ EXEMPLE_RESERVE_MAIRIE = exemple_erreur(
 )
 DESCRIPTION_VISIBILITE = """
 **Ce que voit chaque rôle**
-- **Agents et admins** : tout, dont l'identité complète de l'auteur (même anonyme), la
-  priorité, le service et l'agent assignés.
-- **Citoyens** : l'auteur sous la forme « Afiavi H. », ou `null` si le signalement est
-  anonyme ; leurs propres signalements avec leur identité complète (`est_auteur: true`).
-- **Organisations** : jamais l'auteur (`auteur: null`).
+- **Les citoyens restent anonymes** : `auteur` vaut `null` pour tout le monde, **mairie
+  comprise**. Seul l'auteur voit son identité sur ses propres signalements (`est_auteur: true`).
+  La mairie lui répond par `/repondre/` et les changements de statut (notifications).
+- **Agents et admins** : en plus, la priorité, le service et l'agent assignés.
+- **Citoyens et organisations** : ni priorité, ni assignation, ni notes internes.
 """
 
 
@@ -126,7 +127,7 @@ dossier confié automatiquement au service par défaut du secteur.
         responses={201: enveloppe(SignalementCreeSerializer), **erreurs(400, 401, 403, 409, 429)},
         examples=[
             exemple_requete("Mode GPS, description écrite", exemples.REQUETE_GPS),
-            exemple_requete("Mode manuel, description vocale, anonyme", exemples.REQUETE_VOCALE),
+            exemple_requete("Mode manuel, description vocale", exemples.REQUETE_VOCALE),
             exemple_succes(
                 "Signalement envoyé",
                 exemples.CREE,
@@ -188,9 +189,12 @@ class SignalementViewSet(
         return SignalementDetailSerializer if self.action in ACTIONS_DETAIL else SignalementListSerializer
 
     def get_queryset(self):
-        queryset = Signalement.objects.select_related(
-            "secteur", "quartier__arrondissement", "auteur", "service_assigne", "agent_assigne"
-        ).prefetch_related("medias")
+        queryset = cloisonner(
+            Signalement.objects.select_related(
+                "commune", "secteur", "quartier__arrondissement", "auteur", "service_assigne", "agent_assigne"
+            ).prefetch_related("medias"),
+            self.request.user,
+        )
         if self.action == "mes_signalements" and not getattr(self, "swagger_fake_view", False):
             queryset = queryset.filter(auteur=self.request.user)
         if self.action in ACTIONS_DETAIL:
@@ -221,7 +225,6 @@ class SignalementViewSet(
             titre=donnees.get("titre", ""),
             description_texte=donnees.get("description_texte", ""),
             description_audio_id=donnees.get("description_audio"),
-            anonyme=donnees["anonyme"],
             latitude=donnees.get("latitude"),
             longitude=donnees.get("longitude"),
             precision_gps=donnees.get("precision_gps"),

@@ -32,7 +32,7 @@ LISTE_COMMUNE = {
     "medias": [],
     "a_reponse": False,
 }
-LISTE_MAIRIE = {**LISTE, "auteur": AUTEUR_COMPLET, "je_soutiens": False, "est_pertinente": True}
+LISTE_MAIRIE = {**LISTE, "je_soutiens": False, "est_pertinente": True}
 
 HISTORIQUE = [
     {

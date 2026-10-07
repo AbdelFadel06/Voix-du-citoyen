@@ -1,10 +1,9 @@
 """
 Ce que chaque rôle voit d'un dossier citoyen (signalement, suggestion) — CLAUDE.md § 2.
 
-- Agents et admins mairie : tout (identité de l'auteur, champs internes, notes internes).
-- L'auteur : sa propre identité complète.
-- Autres citoyens : « Prénom N. », ou rien si le dossier est anonyme.
-- Organisations : jamais l'auteur.
+- Identité de l'auteur : **personne** ne la voit, sauf l'auteur lui-même sur ses propres
+  dossiers (ni la mairie, ni les autres citoyens, ni les organisations).
+- Agents et admins mairie : champs internes et notes internes.
 """
 
 from rest_framework import serializers
@@ -35,26 +34,21 @@ class ChampsMairieMixin:
 
 
 class AuteurSerializer(serializers.Serializer):
-    """`nom_affiche` pour le public ; identité complète pour la mairie et l'auteur lui-même."""
+    """Identité de l'auteur, envoyée **uniquement à l'auteur lui-même**."""
 
     nom_affiche = serializers.CharField(help_text="Prénom et initiale du nom, ex. « Afiavi H. ».")
-    id = serializers.IntegerField(allow_null=True, help_text="Identifiant (mairie et auteur uniquement).")
-    nom = serializers.CharField(allow_null=True, help_text="Nom (mairie et auteur uniquement).")
-    prenoms = serializers.CharField(allow_null=True, help_text="Prénom(s) (mairie et auteur uniquement).")
-    telephone = serializers.CharField(allow_null=True, help_text="Téléphone (mairie et auteur uniquement).")
+    id = serializers.IntegerField(help_text="Identifiant du compte.")
+    nom = serializers.CharField(help_text="Nom.")
+    prenoms = serializers.CharField(help_text="Prénom(s).")
+    telephone = serializers.CharField(help_text="Téléphone.")
 
 
 def representer_auteur(dossier, viewer):
-    """Auteur de `dossier` tel que `viewer` a le droit de le voir (ou None)."""
+    """Identité de l'auteur si `viewer` est l'auteur ; None pour tous les autres, mairie comprise."""
     auteur = dossier.auteur
-    complet = est_personnel_mairie(viewer) or (viewer is not None and viewer.pk == auteur.pk)
-    if not complet:
-        anonyme = getattr(dossier, "anonyme", False)
-        if viewer is None or viewer.role == Utilisateur.Role.ORGANISATION or anonyme:
-            return None
+    if viewer is None or viewer.pk != auteur.pk:
+        return None
     nom_affiche = f"{auteur.prenoms} {auteur.nom[:1]}.".strip()
-    if not complet:
-        return {"nom_affiche": nom_affiche, "id": None, "nom": None, "prenoms": None, "telephone": None}
     return {
         "nom_affiche": nom_affiche,
         "id": auteur.pk,
@@ -71,7 +65,8 @@ class SuiviSerializer(ChampsMairieMixin, serializers.ModelSerializer):
 
     par_la_mairie = serializers.SerializerMethodField(help_text="Vrai si l'événement vient de la mairie.")
     auteur_nom = serializers.SerializerMethodField(
-        help_text="Nom de la personne à l'origine de l'événement (agents et admins uniquement)."
+        help_text="Nom de l'agent à l'origine de l'événement (agents et admins uniquement) ; `null` "
+        "pour un événement du citoyen (ex. le dépôt), dont l'identité n'est jamais montrée."
     )
 
     class Meta:
@@ -100,5 +95,7 @@ class SuiviSerializer(ChampsMairieMixin, serializers.ModelSerializer):
     def get_par_la_mairie(self, suivi) -> bool:
         return suivi.auteur.role in ROLES_MAIRIE
 
-    def get_auteur_nom(self, suivi) -> str:
+    def get_auteur_nom(self, suivi) -> str | None:
+        if suivi.auteur.role not in ROLES_MAIRIE:
+            return None  # le citoyen reste anonyme, y compris pour la mairie
         return f"{suivi.auteur.prenoms} {suivi.auteur.nom}".strip()

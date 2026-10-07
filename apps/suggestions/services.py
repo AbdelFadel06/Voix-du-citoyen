@@ -10,6 +10,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from apps.core.codes_erreur import CodeErreur
+from apps.core.communes import commune_de_l_auteur, controler_quartier
 from apps.core.exceptions import ErreurMetier
 from apps.core.references import prochaine_reference
 from apps.medias import services as medias
@@ -25,9 +26,12 @@ PREFIXE_REFERENCE = "SUG"
 
 @transaction.atomic
 def creer_suggestion(*, auteur, titre, description, secteur, quartier=None, medias_ids=()):
+    commune = commune_de_l_auteur(auteur)
+    controler_quartier(quartier, commune)
     photos = medias.verifier_medias(auteur, medias_ids, RATTACHEMENT_SUGGESTION)
     suggestion = Suggestion.objects.create(
         reference=prochaine_reference(Suggestion, PREFIXE_REFERENCE),
+        commune=commune,
         titre=titre.strip(),
         description=description.strip(),
         secteur=secteur,

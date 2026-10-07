@@ -19,6 +19,7 @@ Django 5.2 · Django REST Framework · PostgreSQL 17 · authentification JWT.
 6. [En cas de problème](#6-en-cas-de-problème)
 7. [Organisation du code et règles du projet](#7-organisation-du-code-et-règles-du-projet)
 8. [Déploiement en production](#8-déploiement-en-production)
+9. [Version de test en ligne (Render)](#9-version-de-test-en-ligne-render)
 
 ---
 
@@ -140,8 +141,9 @@ python manage.py migrate
 python manage.py createsuperuser
 ```
 
-Le **téléphone** sert d'identifiant : saisir un numéro béninois, par exemple `0197000001`
-(il est enregistré au format `+2290197000001`). Puis nom, prénoms et mot de passe.
+Saisir un numéro béninois (par exemple `0197000001`), votre **adresse e-mail**, puis nom,
+prénoms et mot de passe. **Les comptes de la mairie et des organisations se connectent avec
+leur adresse e-mail** ; les citoyens se connectent avec leur numéro de téléphone.
 
 ### 2.7 Lancer le serveur
 
@@ -170,9 +172,14 @@ d'exemple sont fournis dans `docs/exemples/`.
 > Les quartiers d'exemple ont des **coordonnées approximatives**, uniquement pour les
 > essais. Les vraies données viendront de la mairie.
 
+Tout ce qui suit peut se faire de trois façons, au choix : depuis **Swagger** (ou
+l'application web de la mairie) avec un compte admin mairie, dans l'**admin Django**, ou
+avec une **commande** dans le terminal.
+
 ### 3.1 Créer la commune
 
-Dans l'admin : **Territoire → Communes → Ajouter**, par exemple :
+Avec `POST /api/v1/communes/` (Swagger) ou dans l'admin : **Territoire → Communes → Ajouter**,
+par exemple :
 
 | Champ | Valeur d'exemple |
 |---|---|
@@ -184,12 +191,25 @@ Dans l'admin : **Territoire → Communes → Ajouter**, par exemple :
 
 L'emprise (latitudes et longitudes) sert à refuser les positions GPS hors de la commune.
 
-### 3.2 Charger les quartiers et les secteurs
+La plateforme peut servir **plusieurs communes** (aujourd'hui Parakou en production). Chaque
+commune a ses propres quartiers, services, agents et dossiers ; une mairie ne voit que les
+siens. Les secteurs sont communs à toutes les communes. Seul l'**admin de la plateforme**
+(compte admin mairie sans commune, par exemple celui créé par `createsuperuser`) peut
+ajouter une commune.
+
+### 3.2 Charger les services, les quartiers et les secteurs
+
+Dans le terminal :
 
 ```bash
+python manage.py charger_services docs/exemples/services.csv --commune ABC
 python manage.py charger_quartiers docs/exemples/quartiers.csv --commune ABC
 python manage.py charger_secteurs docs/exemples/secteurs.csv
 ```
+
+Ou depuis Swagger (compte admin mairie), en envoyant le fichier à
+`POST /api/v1/services/import/`, `/quartiers/import/` et `/secteurs/import/`. On peut aussi
+créer les éléments un par un (`POST /api/v1/secteurs/`, `/quartiers/`, `/services/`…).
 
 - `--simulation` vérifie un fichier sans rien enregistrer.
 - Un fichier est accepté en entier ou refusé en entier, avec le numéro des lignes en erreur.
@@ -198,15 +218,17 @@ python manage.py charger_secteurs docs/exemples/secteurs.csv
 
 ### 3.3 Créer des comptes pour essayer
 
-- **Citoyen** : depuis Swagger, `POST /auth/register/`, puis `POST /auth/otp/verify/` avec
+- **Citoyen** : depuis Swagger, `POST /auth/register/` (avec `commune` : l'`id` lu dans
+  `GET /communes/`, liste publique), puis `POST /auth/otp/verify/` avec
   le code affiché dans le terminal de `runserver`.
-- **Agent de la mairie** : dans l'admin, créer d'abord un **service municipal**, puis un
-  **utilisateur** de rôle `AGENT` rattaché à ce service.
+- **Agent de la mairie** : avec un compte admin, `POST /api/v1/agents/` (rôle `AGENT`,
+  rattaché à un service de la commune), ou dans l'admin Django.
 - **Organisation** (ONG, OSC) : créer l'**organisation** dans l'admin, puis un utilisateur
   de rôle `ORGANISATION` rattaché à elle.
 
-Pour appeler les routes protégées dans Swagger : `POST /auth/login/`, copier le jeton
-`access`, cliquer sur **Authorize** et le coller.
+Pour appeler les routes protégées dans Swagger : `POST /auth/login/` (`email` + `password`
+pour la mairie et les organisations, `telephone` + `password` pour un citoyen), copier le
+jeton `access`, cliquer sur **Authorize** et le coller.
 
 ---
 
@@ -332,3 +354,49 @@ docker run --env-file .env.production -p 8000:8000 voix-du-citoyen-api
 
 La structure complète de la base est aussi disponible en SQL dans
 `docs/base_de_donnees.sql` (pour la consulter sans le code ; pour installer, `migrate` suffit).
+
+---
+
+## 9. Version de test en ligne (Render)
+
+Une **préproduction** gratuite sur [Render](https://render.com), pour que l'équipe mobile et
+web travaille sur une API en ligne. Tout est décrit dans `render.yaml` (API + base PostgreSQL)
+et `config/settings/render.py`.
+
+### Mise en place (une seule fois)
+
+1. Pousser le code sur GitHub (le dépôt doit contenir `render.yaml`).
+2. Sur Render : **New → Blueprint**, choisir le dépôt, puis **Apply**.
+3. Render demande les variables marquées `sync: false` :
+
+   | Variable | Exemple |
+   |---|---|
+   | `DJANGO_SUPERUSER_TELEPHONE` | `+2290197000001` |
+   | `DJANGO_SUPERUSER_EMAIL` | `admin@mairie-parakou.bj` |
+   | `DJANGO_SUPERUSER_NOM` / `_PRENOMS` | `Dossou` / `Koffi` |
+   | `DJANGO_SUPERUSER_PASSWORD` | un mot de passe solide |
+   | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` (client web), ou vide |
+
+4. Au premier démarrage, `deploy/render-start.sh` crée les tables et ce compte admin
+   (admin de la plateforme, sans commune). L'API est sur
+   `https://voix-du-citoyen-api.onrender.com/api/docs/` (le nom exact est affiché par Render).
+5. Se connecter avec l'e-mail admin, puis créer la commune et charger les données de départ
+   depuis Swagger : `POST /communes/`, `POST /quartiers/import/`, `POST /services/import/`,
+   `POST /secteurs/import/` (fichiers d'exemple dans `docs/exemples/`).
+
+Ensuite, chaque `git push` sur `main` redéploie automatiquement.
+
+### Ce qu'il faut savoir
+
+- **Codes OTP** : aucun SMS n'est envoyé. Le code s'affiche dans **Render → le service →
+  Logs** (encadré « SMS »), comme dans le terminal en développement. La personne qui a
+  accès à Render le communique au testeur. Même chose pour les notifications push.
+- **Mise en veille** : en formule gratuite, l'API s'endort après 15 minutes sans requête ;
+  la requête suivante prend environ une minute (réveil).
+- **Photos, vidéos, audios** : le disque du service gratuit est **effacé à chaque
+  redéploiement ou redémarrage**. Pour les garder, activer le stockage S3 (`USE_S3=True` et
+  les variables `AWS_*`, par exemple avec Cloudflare R2, qui a une offre gratuite).
+- **Base de données gratuite** : Render la supprime au bout de 30 jours ; il faut alors
+  passer à une formule payante ou en recréer une (les données sont perdues).
+- **Ce n'est pas la production** : `config.settings.render` autorise l'affichage des codes
+  dans les journaux. La vraie production utilise `config.settings.prod`, qui l'interdit.

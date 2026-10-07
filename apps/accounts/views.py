@@ -24,11 +24,13 @@ from . import exemples, services
 from .serializers import (
     ConnexionSerializer,
     DeconnexionSerializer,
+    DemandeReinitialisationSerializer,
     InscriptionDonneesSerializer,
     InscriptionSerializer,
     JetonsRafraichisSerializer,
     JetonsSerializer,
     RafraichissementSerializer,
+    ReinitialisationSerializer,
     RenvoiOTPSerializer,
     UtilisateurSerializer,
     VerificationOTPSerializer,
@@ -39,6 +41,10 @@ MESSAGE_VERIFICATION = "Votre numéro est vérifié. Bienvenue !"
 MESSAGE_RENVOI = "Si une inscription est en attente pour ce numéro, un nouveau code a été envoyé."
 MESSAGE_CONNEXION = "Connexion réussie."
 MESSAGE_PROFIL = "Votre profil a été mis à jour."
+MESSAGE_DEMANDE_REINITIALISATION = (
+    "Si un compte correspond, un code de vérification a été envoyé par SMS au numéro du compte."
+)
+MESSAGE_REINITIALISATION = "Votre mot de passe a été modifié. Connectez-vous avec le nouveau mot de passe."
 
 EXEMPLE_TELEPHONE_INVALIDE = exemple_erreur(
     CodeErreur.VALIDATION_ERREUR,
@@ -224,12 +230,19 @@ class ConnexionView(VuePublique):
         tags=[TAG_AUTH],
         summary="Se connecter",
         description="""
-Connexion par **numéro de téléphone et mot de passe**, pour tous les rôles.
 Renvoie les jetons et le profil (le `role` indique quels écrans afficher).
+L'identifiant dépend du type de compte — envoyer **l'un ou l'autre**, jamais les deux :
+
+| Compte | Identifiant |
+|---|---|
+| Citoyen (application mobile) | `telephone` + `password` |
+| Agent, admin mairie, organisation (application web) | `email` + `password` |
 
 **Refus possibles**
-- `IDENTIFIANTS_INVALIDES` (401) : numéro inconnu ou mot de passe incorrect
+- `IDENTIFIANTS_INVALIDES` (401) : identifiant inconnu ou mot de passe incorrect
   (la réponse ne précise pas lequel des deux).
+- `CONNEXION_PAR_EMAIL` / `CONNEXION_PAR_TELEPHONE` (400) : le mot de passe est bon mais la
+  mauvaise méthode a été utilisée (ex. un agent avec son téléphone) ; afficher le message.
 - `TELEPHONE_NON_VERIFIE` (403) : citoyen dont le numéro n'est pas encore vérifié.
   Afficher l'écran de saisie du code (et proposer `/auth/otp/resend/`).
 - `COMPTE_DESACTIVE` (403) : compte désactivé par la mairie (signalé seulement si le mot
@@ -244,8 +257,10 @@ Les comptes agents et organisations, créés par la mairie, n'ont pas besoin de 
         request=ConnexionSerializer,
         responses={200: enveloppe(JetonsSerializer), **erreurs(400, 401, 403)},
         examples=[
+            exemple_requete("Citoyen (téléphone)", {"telephone": "0197123456", "password": "Barometre!2026"}),
             exemple_requete(
-                "Identifiants", {"telephone": "0197123456", "password": "Barometre!2026"}
+                "Mairie ou organisation (e-mail)",
+                {"email": "r.ahouansou@mairie-parakou.bj", "password": "Parakou!2026"},
             ),
             exemple_succes("Citoyen connecté", exemples.JETONS, MESSAGE_CONNEXION),
             exemple_succes(
@@ -259,6 +274,13 @@ Les comptes agents et organisations, créés par la mairie, n'ont pas besoin de 
                 MESSAGE_CONNEXION,
             ),
             exemple_erreur(CodeErreur.IDENTIFIANTS_INVALIDES),
+            exemple_erreur(CodeErreur.CONNEXION_PAR_EMAIL),
+            exemple_erreur(CodeErreur.CONNEXION_PAR_TELEPHONE),
+            exemple_erreur(
+                CodeErreur.VALIDATION_ERREUR,
+                details={"identifiant": ["Indiquez soit le numéro de téléphone (citoyens), soit l'adresse e-mail (mairie, organisations)."]},
+                nom="Identifiant manquant ou en double",
+            ),
             exemple_erreur(CodeErreur.TELEPHONE_NON_VERIFIE),
             exemple_erreur(CodeErreur.COMPTE_DESACTIVE),
             exemple_erreur(CodeErreur.ORGANISATION_NON_HABILITEE),
@@ -268,12 +290,126 @@ Les comptes agents et organisations, créés par la mairie, n'ont pas besoin de 
     def post(self, request):
         serializer = ConnexionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        donnees = serializer.validated_data
         utilisateur = services.connecter(
-            request,
-            telephone=serializer.validated_data["telephone"].as_e164,
-            password=serializer.validated_data["password"],
+            password=donnees["password"],
+            telephone=donnees["telephone"].as_e164 if donnees.get("telephone") else None,
+            email=donnees.get("email"),
         )
         return reponse_succes(donnees_jetons(utilisateur), MESSAGE_CONNEXION)
+
+
+class DemandeReinitialisationView(VuePublique):
+    throttle_classes = [ThrottleOTP]
+
+    @extend_schema(
+        tags=[TAG_AUTH],
+        summary="Demander un code pour changer de mot de passe",
+        description="""
+Première étape du **mot de passe oublié** : envoie un code à 6 chiffres **par SMS, au numéro
+de téléphone du compte**. L'étape suivante est `POST /auth/password/reset/confirm/`.
+
+L'identifiant est le même qu'à la connexion — envoyer **l'un ou l'autre** :
+
+| Compte | Identifiant |
+|---|---|
+| Citoyen (application mobile) | `telephone` |
+| Agent, admin mairie, organisation (application web) | `email` (le code part sur le téléphone du compte) |
+
+**Règles**
+- La réponse est **toujours la même**, qu'un compte corresponde ou non, pour ne pas révéler
+  qui est inscrit. Aucun SMS n'est envoyé pour un compte inconnu, désactivé, un citoyen dont
+  le numéro n'est pas encore vérifié (il doit finir son inscription avec `/auth/otp/resend/`)
+  ou un identifiant de la mauvaise méthode (ex. un agent avec son téléphone).
+- Le code expire au bout de 10 minutes ; une nouvelle demande remplace le code précédent.
+- Un agent qui n'a plus accès à son téléphone peut aussi demander à un admin de lui fixer un
+  nouveau mot de passe (`PATCH /agents/{id}/`).
+
+**Limitation** : 5 demandes de code par heure et par identifiant, sinon `TROP_DE_REQUETES` (429).
+
+**Public** : aucun jeton requis.
+""",
+        auth=[],
+        request=DemandeReinitialisationSerializer,
+        responses={200: enveloppe(), **erreurs(400, 429, 503)},
+        examples=[
+            exemple_requete("Citoyen (téléphone)", {"telephone": "0197123456"}),
+            exemple_requete("Mairie ou organisation (e-mail)", {"email": "r.ahouansou@mairie-parakou.bj"}),
+            exemple_succes("Demande prise en compte", None, MESSAGE_DEMANDE_REINITIALISATION),
+            exemple_erreur(
+                CodeErreur.VALIDATION_ERREUR,
+                details={"identifiant": ["Indiquez soit le numéro de téléphone (citoyens), soit l'adresse e-mail (mairie, organisations)."]},
+                nom="Identifiant manquant ou en double",
+            ),
+            exemple_trop_de_requetes(),
+            exemple_erreur(CodeErreur.SMS_ECHEC, description="Le fournisseur SMS n'a pas répondu."),
+        ],
+    )
+    def post(self, request):
+        serializer = DemandeReinitialisationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        services.demander_reinitialisation(**serializer.identifiant())
+        return reponse_succes(message=MESSAGE_DEMANDE_REINITIALISATION)
+
+
+class ReinitialisationView(VuePublique):
+    @extend_schema(
+        tags=[TAG_AUTH],
+        summary="Changer de mot de passe avec le code SMS",
+        description="""
+Deuxième étape du **mot de passe oublié** : contrôle le code reçu après
+`POST /auth/password/reset/` et enregistre le nouveau mot de passe. Envoyer le **même
+identifiant** (`telephone` ou `email`) que pour la demande.
+
+**Après le changement**, toutes les sessions ouvertes du compte sont fermées (les jetons
+`refresh` ne fonctionnent plus, les jetons `access` expirent dans les 30 minutes).
+L'application renvoie l'utilisateur vers `POST /auth/login/` avec le nouveau mot de passe.
+
+**Refus possibles**
+- `VALIDATION_ERREUR` sur `password` : mot de passe trop faible. Le nouveau mot de passe est
+  contrôlé **avant** le code : le code reste valable, l'utilisateur corrige et renvoie.
+- `OTP_INVALIDE` (400) : code incorrect, avec `details.tentatives_restantes`.
+- `OTP_EXPIRE` (400) : code expiré, déjà utilisé, remplacé, ou aucune demande en cours
+  pour cet identifiant. Proposer de redemander un code.
+- `OTP_TENTATIVES_DEPASSEES` (429) : 5 erreurs, le code est bloqué ; redemander un code.
+
+**Public** : aucun jeton requis.
+""",
+        auth=[],
+        request=ReinitialisationSerializer,
+        responses={200: enveloppe(), **erreurs(400, 429)},
+        examples=[
+            exemple_requete(
+                "Citoyen", {"telephone": "0197123456", "code": "482915", "password": "Nouveau!Pass2026"}
+            ),
+            exemple_requete(
+                "Mairie ou organisation",
+                {"email": "r.ahouansou@mairie-parakou.bj", "code": "482915", "password": "Parakou!2027"},
+            ),
+            exemple_succes("Mot de passe modifié", None, MESSAGE_REINITIALISATION),
+            exemple_erreur(
+                CodeErreur.OTP_INVALIDE,
+                "Le code saisi est incorrect. Il vous reste 4 essais.",
+                details={"tentatives_restantes": 4},
+            ),
+            exemple_erreur(CodeErreur.OTP_EXPIRE),
+            exemple_erreur(
+                CodeErreur.VALIDATION_ERREUR,
+                details={"password": ["Ce mot de passe est trop courant."]},
+                nom="Mot de passe trop faible",
+            ),
+            exemple_erreur(CodeErreur.OTP_TENTATIVES_DEPASSEES),
+        ],
+    )
+    def post(self, request):
+        serializer = ReinitialisationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        services.reinitialiser_mot_de_passe(
+            code=serializer.validated_data["code"],
+            password=serializer.validated_data["password"],
+            **serializer.identifiant(),
+        )
+        return reponse_succes(message=MESSAGE_REINITIALISATION)
 
 
 @extend_schema_view(

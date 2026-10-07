@@ -19,7 +19,7 @@ class SuggestionAdmin(admin.ModelAdmin):
     """Consultation ; la marque « pertinente », les réponses et les soutiens passent par l'API."""
 
     list_display = ["reference", "titre", "est_pertinente", "secteur", "quartier", "nb_soutiens", "cree_le"]
-    list_filter = ["est_pertinente", "secteur"]
+    list_filter = ["commune", "est_pertinente", "secteur"]
     search_fields = ["reference", "titre", "description", "auteur__telephone"]
     list_select_related = ["secteur", "quartier"]
     date_hierarchy = "cree_le"

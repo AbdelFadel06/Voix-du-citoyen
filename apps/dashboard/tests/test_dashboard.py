@@ -15,6 +15,7 @@ from apps.signalements import services as signalements
 from apps.signalements.models import Signalement
 from apps.suggestions import services as suggestions
 from apps.territoire.models import Arrondissement, Quartier
+from conftest import commune_de_test
 
 pytestmark = pytest.mark.django_db
 
@@ -35,7 +36,7 @@ def donnees(commune, creer_utilisateur, televerser):
     cococodji = Quartier.objects.create(arrondissement=calavi, nom="Cococodji", code="COC")
     voirie = Secteur.objects.create(nom="Voirie", code="VOIRIE", couleur="#F57C00", pour_signalement=True, pour_suggestion=True, pour_realisation=True)
     eclairage = Secteur.objects.create(nom="Éclairage", code="ECLAIRAGE", pour_signalement=True, pour_realisation=True)
-    agent = creer_utilisateur(role=Utilisateur.Role.AGENT, service=ServiceMunicipal.objects.create(nom="Voirie"))
+    agent = creer_utilisateur(role=Utilisateur.Role.AGENT, service=ServiceMunicipal.objects.create(commune=commune_de_test(), nom="Voirie"))
     citoyen = creer_utilisateur()
 
     def signaler(secteur, quartier, gps=False):

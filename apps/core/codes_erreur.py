@@ -24,6 +24,9 @@ class CodeErreur(models.TextChoices):
 
     # --- Authentification ---
     TELEPHONE_DEJA_UTILISE = "TELEPHONE_DEJA_UTILISE"
+    EMAIL_DEJA_UTILISE = "EMAIL_DEJA_UTILISE"
+    CONNEXION_PAR_EMAIL = "CONNEXION_PAR_EMAIL"
+    CONNEXION_PAR_TELEPHONE = "CONNEXION_PAR_TELEPHONE"
     IDENTIFIANTS_INVALIDES = "IDENTIFIANTS_INVALIDES"
     TELEPHONE_NON_VERIFIE = "TELEPHONE_NON_VERIFIE"
     COMPTE_DESACTIVE = "COMPTE_DESACTIVE"
@@ -35,6 +38,11 @@ class CodeErreur(models.TextChoices):
 
     # --- Territoire ---
     COORDONNEES_HORS_COMMUNE = "COORDONNEES_HORS_COMMUNE"
+    COMMUNE_NON_RENSEIGNEE = "COMMUNE_NON_RENSEIGNEE"
+
+    # --- Administration du référentiel ---
+    IMPORT_CSV_INVALIDE = "IMPORT_CSV_INVALIDE"
+    ACTION_SUR_SON_PROPRE_COMPTE = "ACTION_SUR_SON_PROPRE_COMPTE"
 
     # --- Médias ---
     MEDIA_FORMAT_NON_AUTORISE = "MEDIA_FORMAT_NON_AUTORISE"
@@ -72,7 +80,13 @@ INFOS_ERREURS = {
         "Le service est momentanément indisponible. Veuillez réessayer plus tard.",
     ),
     CodeErreur.TELEPHONE_DEJA_UTILISE: (409, "Ce numéro de téléphone est déjà utilisé."),
-    CodeErreur.IDENTIFIANTS_INVALIDES: (401, "Numéro de téléphone ou mot de passe incorrect."),
+    CodeErreur.IDENTIFIANTS_INVALIDES: (401, "Identifiant ou mot de passe incorrect."),
+    CodeErreur.EMAIL_DEJA_UTILISE: (409, "Cette adresse e-mail est déjà utilisée par un autre compte."),
+    CodeErreur.CONNEXION_PAR_EMAIL: (
+        400,
+        "Les comptes de la mairie et des organisations se connectent avec leur adresse e-mail.",
+    ),
+    CodeErreur.CONNEXION_PAR_TELEPHONE: (400, "Connectez-vous avec votre numéro de téléphone."),
     CodeErreur.TELEPHONE_NON_VERIFIE: (
         403,
         "Votre numéro n'est pas encore vérifié. Saisissez le code reçu par SMS.",
@@ -95,6 +109,18 @@ INFOS_ERREURS = {
     CodeErreur.COORDONNEES_HORS_COMMUNE: (
         400,
         "Cette position se trouve en dehors de la commune.",
+    ),
+    CodeErreur.COMMUNE_NON_RENSEIGNEE: (
+        400,
+        "Indiquez d'abord votre commune de résidence dans votre profil.",
+    ),
+    CodeErreur.IMPORT_CSV_INVALIDE: (
+        400,
+        "Le fichier ne peut pas être importé : corrigez les lignes indiquées. Rien n'a été enregistré.",
+    ),
+    CodeErreur.ACTION_SUR_SON_PROPRE_COMPTE: (
+        400,
+        "Vous ne pouvez pas désactiver votre propre compte ni retirer votre propre rôle d'administrateur.",
     ),
     CodeErreur.MEDIA_FORMAT_NON_AUTORISE: (400, "Ce format de fichier n'est pas accepté."),
     CodeErreur.MEDIA_TROP_VOLUMINEUX: (400, "Ce fichier est trop volumineux."),

@@ -42,7 +42,8 @@ AUTEUR_COMPLET = {
     "prenoms": "Afiavi",
     "telephone": "+2290197123456",
 }
-AUTEUR_PUBLIC = {**AUTEUR_COMPLET, "id": None, "nom": None, "prenoms": None, "telephone": None}
+# L'identité n'est envoyée qu'à l'auteur lui-même ; tous les autres reçoivent null.
+AUTEUR_PUBLIC = None
 
 # Vu par un citoyen qui n'est pas l'auteur.
 LISTE_CITOYEN = {
@@ -58,7 +59,6 @@ LISTE_CITOYEN = {
     "repere": "Devant l'EPP Togoudo",
     "medias": [MINIATURE],
     "a_description_audio": True,
-    "anonyme": False,
     "auteur": AUTEUR_PUBLIC,
     "est_auteur": False,
     "cree_le": "2026-10-06T16:21:40+01:00",
@@ -68,7 +68,6 @@ LISTE_CITOYEN = {
 # Vu par un agent ou un admin mairie.
 LISTE_MAIRIE = {
     **LISTE_CITOYEN,
-    "auteur": AUTEUR_COMPLET,
     "priorite": "HAUTE",
     "service_assigne": {"id": 3, "nom": "Voirie et assainissement"},
     "agent_assigne": {"id": 7, "nom": "Ahouansou", "prenoms": "Rodrigue"},
@@ -106,7 +105,7 @@ HISTORIQUE_CITOYEN = [
 
 HISTORIQUE_MAIRIE = [
     {**evenement, "auteur_nom": nom, "visible_citoyen": True}
-    for evenement, nom in zip(HISTORIQUE_CITOYEN, ["Afiavi Hounkpatin", "Rodrigue Ahouansou", "Rodrigue Ahouansou"])
+    for evenement, nom in zip(HISTORIQUE_CITOYEN, [None, "Rodrigue Ahouansou", "Rodrigue Ahouansou"])
 ] + [
     {
         "id": 504,
@@ -172,5 +171,4 @@ REQUETE_VOCALE = {
     "mode_localisation": "MANUEL",
     "quartier": 12,
     "repere": "Derrière le marché de Godomey",
-    "anonyme": True,
 }

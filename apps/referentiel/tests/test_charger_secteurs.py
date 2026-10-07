@@ -3,6 +3,7 @@ from django.core.management import CommandError, call_command
 
 from apps.accounts.models import ServiceMunicipal
 from apps.referentiel.models import Secteur
+from conftest import commune_de_test
 
 pytestmark = pytest.mark.django_db
 
@@ -24,7 +25,7 @@ def csv(tmp_path):
 
 @pytest.fixture
 def voirie():
-    return ServiceMunicipal.objects.create(nom="Voirie et assainissement")
+    return ServiceMunicipal.objects.create(commune=commune_de_test(), nom="Voirie et assainissement")
 
 
 def charger(chemin, *options):

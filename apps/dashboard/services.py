@@ -33,6 +33,8 @@ TRONCATURES = {"jour": TruncDay, "semaine": TruncWeek, "mois": TruncMonth}
 
 
 def _filtrer(queryset, filtres, champ_quartier):
+    if filtres.get("commune"):
+        queryset = queryset.filter(commune=filtres["commune"])
     if filtres.get("date_debut"):
         queryset = queryset.filter(cree_le__date__gte=filtres["date_debut"])
     if filtres.get("date_fin"):

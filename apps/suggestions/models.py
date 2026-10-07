@@ -11,6 +11,13 @@ class Suggestion(ModeleHorodate):
     """
 
     reference = models.CharField("référence", max_length=20, unique=True, editable=False)
+    commune = models.ForeignKey(
+        "territoire.Commune",
+        on_delete=models.PROTECT,
+        related_name="suggestions",
+        verbose_name="commune",
+        help_text="Commune de l'auteur au moment de l'envoi (déduite du compte, jamais envoyée).",
+    )
     titre = models.CharField("titre", max_length=150)
     description = models.TextField("description")
     secteur = models.ForeignKey(

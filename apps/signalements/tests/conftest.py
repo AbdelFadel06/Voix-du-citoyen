@@ -6,11 +6,12 @@ from apps.accounts.models import ServiceMunicipal, Utilisateur
 from apps.referentiel.models import Secteur
 from apps.signalements import services
 from apps.territoire.models import Arrondissement, Quartier
+from conftest import commune_de_test
 
 
 @pytest.fixture
 def voirie():
-    return ServiceMunicipal.objects.create(nom="Voirie et assainissement")
+    return ServiceMunicipal.objects.create(commune=commune_de_test(), nom="Voirie et assainissement")
 
 
 @pytest.fixture

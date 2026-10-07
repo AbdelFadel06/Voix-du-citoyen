@@ -18,7 +18,7 @@ class RealisationAdmin(admin.ModelAdmin):
     """Consultation et corrections ; la création et les médias passent par l'API."""
 
     list_display = ["reference", "titre", "statut", "taux_avancement", "secteur", "publie", "maj_le"]
-    list_filter = ["publie", "statut", "secteur"]
+    list_filter = ["commune", "publie", "statut", "secteur"]
     search_fields = ["reference", "titre", "description", "prestataire"]
     list_select_related = ["secteur"]
     filter_horizontal = ["quartiers"]

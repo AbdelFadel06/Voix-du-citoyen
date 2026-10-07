@@ -4,8 +4,9 @@ from rest_framework.throttling import SimpleRateThrottle
 
 class ThrottleOTP(SimpleRateThrottle):
     """
-    Limite les demandes de code OTP par numéro de téléphone (et non par IP :
-    beaucoup d'abonnés mobiles partagent la même adresse IP chez l'opérateur).
+    Limite les demandes de code OTP par numéro de téléphone, ou par e-mail pour la mairie et
+    les organisations (et non par IP : beaucoup d'abonnés mobiles partagent la même adresse
+    IP chez l'opérateur).
     """
 
     scope = "otp"
@@ -13,8 +14,11 @@ class ThrottleOTP(SimpleRateThrottle):
     def get_cache_key(self, request, view):
         valeur = request.data.get("telephone") if hasattr(request.data, "get") else None
         numero = to_python(str(valeur)) if valeur else None
+        email = request.data.get("email") if hasattr(request.data, "get") else None
         if numero is not None and numero.is_valid():
             identifiant = numero.as_e164
+        elif email and isinstance(email, str):
+            identifiant = email.strip().lower()
         else:
             identifiant = self.get_ident(request)
         return self.cache_format % {"scope": self.scope, "ident": identifiant}

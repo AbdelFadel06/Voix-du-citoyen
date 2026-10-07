@@ -10,6 +10,11 @@ DEBUG = False
 EST_PRODUCTION = True
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
+# Fichiers statiques (admin) servis par l'application elle-même (WhiteNoise), avec ou sans
+# nginx devant : noms versionnés, compression, cache longue durée.
+MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")  # noqa: F405
+STORAGES["staticfiles"] = {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"}  # noqa: F405
+
 # ---------------------------------------------------------------------------
 # HTTPS (terminé par le reverse proxy)
 # ---------------------------------------------------------------------------

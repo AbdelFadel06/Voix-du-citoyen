@@ -13,7 +13,7 @@ from apps.medias.serializers import MediaResumeSerializer, MediaSerializer
 from apps.referentiel.models import Secteur
 from apps.referentiel.serializers import SecteurResumeSerializer
 from apps.territoire.models import Quartier
-from apps.territoire.serializers import QuartierResumeSerializer
+from apps.territoire.serializers import CommuneResumeSerializer, QuartierResumeSerializer
 
 from .models import Suggestion, SuiviSuggestion
 
@@ -26,12 +26,13 @@ from .models import Suggestion, SuiviSuggestion
 class SuggestionListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
     champs_mairie = ("est_pertinente",)
 
+    commune = CommuneResumeSerializer(help_text="Commune de la suggestion (celle de son auteur).")
     secteur = SecteurResumeSerializer(help_text="Secteur concerné.")
     quartier = QuartierResumeSerializer(
         allow_null=True, help_text="Quartier concerné, ou `null` si la suggestion concerne toute la commune."
     )
     medias = MediaResumeSerializer(many=True, help_text="Aperçus des photos (miniatures uniquement).")
-    auteur = serializers.SerializerMethodField(help_text="Auteur, ou `null` pour une organisation.")
+    auteur = serializers.SerializerMethodField(help_text="Identité de l'auteur, envoyée **seulement à l'auteur lui-même** ; `null` pour tous les autres (mairie comprise).")
     est_auteur = serializers.SerializerMethodField(help_text="Vrai si l'utilisateur connecté est l'auteur.")
     je_soutiens = serializers.SerializerMethodField(
         help_text="Vrai si l'utilisateur connecté soutient cette suggestion."
@@ -44,6 +45,7 @@ class SuggestionListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "id",
             "reference",
             "titre",
+            "commune",
             "secteur",
             "quartier",
             "nb_soutiens",
@@ -152,7 +154,8 @@ class SuggestionCreateSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
         error_messages={"does_not_exist": "Ce quartier n'existe pas ou n'est plus actif."},
-        help_text="Quartier concerné. Laisser vide (ou `null`) si l'idée concerne toute la commune.",
+        help_text="Quartier concerné, dans la commune du citoyen. Laisser vide (ou `null`) si l'idée "
+        "concerne toute la commune.",
     )
     medias = serializers.ListField(
         child=serializers.UUIDField(),

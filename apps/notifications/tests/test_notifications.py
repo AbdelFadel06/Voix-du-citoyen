@@ -16,6 +16,7 @@ from apps.referentiel.models import Secteur
 from apps.signalements import services as signalements
 from apps.suggestions import services as suggestions
 from apps.territoire.models import Arrondissement, Quartier
+from conftest import commune_de_test
 
 pytestmark = pytest.mark.django_db
 
@@ -48,7 +49,7 @@ def citoyen(creer_utilisateur, quartier):
 
 @pytest.fixture
 def agent(creer_utilisateur):
-    return creer_utilisateur(role=Utilisateur.Role.AGENT, service=ServiceMunicipal.objects.create(nom="Voirie"))
+    return creer_utilisateur(role=Utilisateur.Role.AGENT, service=ServiceMunicipal.objects.create(commune=commune_de_test(), nom="Voirie"))
 
 
 @pytest.fixture
@@ -172,9 +173,7 @@ class TestEvenements:
         signalements.changer_statut(signalement, par=agent, statut=statut, commentaire="Terrain privé.")
         assert attendu in Notification.objects.order_by("-id").first().message
 
-    def test_signalement_anonyme_toujours_notifie_a_son_auteur(self, signalement, agent, citoyen):
-        signalement.anonyme = True
-        signalement.save()
+    def test_le_citoyen_anonyme_est_quand_meme_notifie(self, signalement, agent, citoyen):
         signalements.changer_statut(signalement, par=agent, statut="RECU")
         assert Notification.objects.get().destinataire == citoyen
 

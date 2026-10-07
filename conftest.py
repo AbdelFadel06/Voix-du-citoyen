@@ -64,8 +64,16 @@ def creer_utilisateur(db, nouveau_telephone):
         kwargs.setdefault("nom", "Dossou")
         kwargs.setdefault("prenoms", "Koffi")
         kwargs.setdefault("telephone_verifie", True)
+        if role != Utilisateur.Role.CITOYEN:
+            # La mairie et les organisations se connectent avec leur e-mail (obligatoire).
+            chiffres = "".join(c for c in str(kwargs["telephone"]) if c.isdigit())
+            kwargs.setdefault("email", f"compte{chiffres}@mairie.test")
+        if role == Utilisateur.Role.AGENT and "service" in kwargs:
+            kwargs.setdefault("commune", kwargs["service"].commune)
+        if role in (Utilisateur.Role.CITOYEN, Utilisateur.Role.AGENT):
+            kwargs.setdefault("commune", commune_de_test())
         if role == Utilisateur.Role.AGENT and "service" not in kwargs:
-            kwargs["service"], _ = ServiceMunicipal.objects.get_or_create(nom="Voirie")
+            kwargs["service"], _ = ServiceMunicipal.objects.get_or_create(nom="Voirie", commune=kwargs["commune"])
         if role == Utilisateur.Role.ORGANISATION and "organisation" not in kwargs:
             kwargs["organisation"] = Organisation.objects.create(
                 nom="ONG Test",
@@ -111,22 +119,29 @@ def sms():
     return BoiteSMS()
 
 
-@pytest.fixture
-def commune(db):
-    """Commune de test (emprise approximative d'Abomey-Calavi)."""
+def commune_de_test():
+    """Commune de test unique (emprise approximative d'Abomey-Calavi), créée au premier besoin."""
     from decimal import Decimal
 
     from apps.territoire.models import Commune
 
-    return Commune.objects.create(
-        nom="Abomey-Calavi",
+    commune, _ = Commune.objects.get_or_create(
         code="ABC",
-        departement="Atlantique",
-        lat_min=Decimal("6.380000"),
-        lat_max=Decimal("6.650000"),
-        lng_min=Decimal("2.230000"),
-        lng_max=Decimal("2.450000"),
+        defaults={
+            "nom": "Abomey-Calavi",
+            "departement": "Atlantique",
+            "lat_min": Decimal("6.380000"),
+            "lat_max": Decimal("6.650000"),
+            "lng_min": Decimal("2.230000"),
+            "lng_max": Decimal("2.450000"),
+        },
     )
+    return commune
+
+
+@pytest.fixture
+def commune(db):
+    return commune_de_test()
 
 
 @pytest.fixture(autouse=True)

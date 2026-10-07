@@ -20,7 +20,7 @@ L'introduction générale de la documentation est dans `documentation.py`.
 """
 
 from drf_spectacular.contrib.rest_framework_simplejwt import SimpleJWTScheme
-from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema_serializer
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema_serializer
 from rest_framework import serializers
 
 from .codes_erreur import INFOS_ERREURS, CodeErreur, message_par_defaut, statut_http
@@ -39,6 +39,7 @@ TAG_SUGGESTIONS = "Suggestions"
 TAG_REALISATIONS = "Réalisations"
 TAG_NOTIFICATIONS = "Notifications"
 TAG_TABLEAUX_DE_BORD = "Tableaux de bord"
+TAG_ADMINISTRATION = "Administration"
 TAG_SYSTEME = "Système"
 
 TAGS = [
@@ -81,6 +82,11 @@ TAGS = [
         "name": TAG_TABLEAUX_DE_BORD,
         "description": "Chiffres agrégés pour la mairie et les organisations habilitées : synthèse, "
         "répartition par secteur et par quartier, évolution dans le temps, carte.",
+    },
+    {
+        "name": TAG_ADMINISTRATION,
+        "description": "Gestion par les admins mairie : commune, services municipaux et comptes des "
+        "agents. Les secteurs et quartiers se gèrent dans leurs propres groupes.",
     },
     {
         "name": TAG_MEDIAS,
@@ -276,3 +282,57 @@ def completer_documentation(result, generator, request, public):
     result["info"]["description"] = introduction()
     result["tags"] = TAGS
     return result
+
+
+def parametre_id(description):
+    """Paramètre de chemin `{id}` documenté (ex. `parametre_id("Identifiant du secteur.")`)."""
+    return OpenApiParameter("id", int, OpenApiParameter.PATH, description=description)
+
+
+# ---------------------------------------------------------------------------
+# Imports CSV (`POST /…/import/`)
+# ---------------------------------------------------------------------------
+
+
+def schema_import(tag, quoi, format_csv, bilan, exemple_lignes, serializer_bilan=None, parametres="", requete=None):
+    """Arguments de @extend_schema communs aux endpoints d'import CSV."""
+    from .serializers import BilanImportSerializer, ImportCSVSerializer
+
+    serializer_bilan = serializer_bilan or BilanImportSerializer
+    return {
+        "tags": [tag],
+        "summary": f"Importer des {quoi} depuis un fichier CSV",
+        "description": f"""
+Crée ou met à jour des {quoi} en masse à partir d'un fichier CSV envoyé en
+`multipart/form-data` (champ `fichier`). Même règles que la commande du serveur.
+
+**Format** (une ligne par élément, la première ligne contient les noms des colonnes) :
+```
+{format_csv}
+```
+{parametres}
+**Fonctionnement**
+- **Tout ou rien** : la moindre erreur refuse tout le fichier (`IMPORT_CSV_INVALIDE`) ;
+  `details.lignes` donne un message par problème, avec son numéro de ligne, à afficher
+  tel quel.
+- Relancer le même fichier met à jour sans créer de doublon.
+- `simulation=true` vérifie et compte sans rien enregistrer : idéal pour un aperçu avant
+  confirmation.
+- `desactiver_absents=true` désactive ce qui n'est plus dans le fichier (rien n'est supprimé).
+
+**Connecté** : admins mairie uniquement.
+""",
+        "request": {"multipart/form-data": requete or ImportCSVSerializer},
+        "responses": {200: enveloppe(serializer_bilan), **erreurs(400, 401, 403)},
+        "examples": [
+            exemple_succes("Import terminé", {**bilan, "simulation": False}, "Import terminé : …"),
+            exemple_succes("Simulation", {**bilan, "simulation": True}, "Simulation : … Rien n'a été enregistré."),
+            exemple_erreur(CodeErreur.IMPORT_CSV_INVALIDE, details={"lignes": exemple_lignes}),
+            exemple_erreur(
+                CodeErreur.PERMISSION_REFUSEE,
+                "Action réservée aux administrateurs de la mairie.",
+                nom="Réservé aux admins mairie",
+            ),
+            *EXEMPLES_AUTH_REQUISE,
+        ],
+    }

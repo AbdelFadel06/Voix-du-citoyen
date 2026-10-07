@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 
 from apps.core.codes_erreur import CodeErreur
+from apps.core.communes import cloisonner
 from apps.core.permissions import EstAgentMairie, EstCitoyen, est_personnel_mairie
 from apps.core.reponses import reponse_succes
 from apps.core.schema import (
@@ -46,11 +47,10 @@ EXEMPLE_RESERVE_CITOYENS = exemple_erreur(
 )
 DESCRIPTION_VISIBILITE = """
 **Ce que voit chaque rôle**
-- **Agents et admins** : l'identité complète de l'auteur, la marque `est_pertinente`, l'agent
-  qui a répondu, les notes internes.
-- **Citoyens** : l'auteur sous la forme « Afiavi H. » (identité complète sur leurs propres
-  suggestions) ; `je_soutiens` indique s'ils soutiennent déjà la suggestion.
-- **Organisations** : jamais l'auteur (`auteur: null`).
+- **Les citoyens restent anonymes** : `auteur` vaut `null` pour tout le monde, **mairie
+  comprise**. Seul l'auteur voit son identité sur ses propres suggestions (`est_auteur: true`).
+- **Agents et admins** : en plus, la marque `est_pertinente`, l'agent qui a répondu, les notes internes.
+- **Citoyens** : `je_soutiens` indique s'ils soutiennent déjà la suggestion.
 
 Les suggestions n'ont **pas de statut**. La mairie coche celles qu'elle juge pertinentes ;
 cette marque n'est **jamais** montrée aux citoyens ni aux organisations.
@@ -166,7 +166,8 @@ class SuggestionViewSet(
     def get_queryset(self):
         utilisateur = self.request.user
         queryset = (
-            Suggestion.objects.select_related("secteur", "quartier__arrondissement", "auteur")
+            cloisonner(Suggestion.objects.all(), utilisateur)
+            .select_related("commune", "secteur", "quartier__arrondissement", "auteur")
             .prefetch_related("medias")
             .annotate(
                 je_soutiens=Exists(

@@ -15,7 +15,6 @@ from apps.core.references import prochaine_reference
 from apps.medias import services as medias
 from apps.medias.regles import RATTACHEMENT_REALISATION
 from apps.notifications import services as notifications
-from apps.territoire.services import commune_contenant
 
 from .models import Realisation, RealisationMedia
 
@@ -41,8 +40,20 @@ def _controler(realisation):
             erreurs[fin] = [libelle]
     if erreurs:
         raise ErreurMetier(CodeErreur.VALIDATION_ERREUR, details=erreurs)
-    if realisation.latitude is not None:
-        commune_contenant(realisation.latitude, realisation.longitude)
+    if realisation.latitude is not None and not realisation.commune.contient(realisation.latitude, realisation.longitude):
+        raise ErreurMetier(CodeErreur.COORDONNEES_HORS_COMMUNE)
+
+
+def _controler_relations(commune, relations):
+    """Quartiers, signalements et suggestions liés doivent appartenir à la commune de la réalisation."""
+    erreurs = {}
+    if any(q.arrondissement.commune_id != commune.pk for q in relations.get("quartiers", [])):
+        erreurs["quartiers"] = [f"Tous les quartiers doivent être dans la commune de {commune.nom}."]
+    for nom in ("signalements", "suggestions"):
+        if any(dossier.commune_id != commune.pk for dossier in relations.get(nom, [])):
+            erreurs[nom] = [f"Les {nom} liés doivent être de la commune de {commune.nom}."]
+    if erreurs:
+        raise ErreurMetier(CodeErreur.VALIDATION_ERREUR, details=erreurs)
 
 
 def _enregistrer_medias(realisation, elements, par):
@@ -78,8 +89,11 @@ def _enregistrer_medias(realisation, elements, par):
 @transaction.atomic
 def creer_realisation(*, par, medias=(), **champs):
     relations = {nom: champs.pop(nom, []) for nom in RELATIONS}
+    # Commune de l'agent ; pour un admin de la plateforme, celle des quartiers concernés.
+    commune = par.commune or relations["quartiers"][0].arrondissement.commune
+    _controler_relations(commune, relations)
     champs["latitude"], champs["longitude"] = _coordonnee(champs.get("latitude")), _coordonnee(champs.get("longitude"))
-    realisation = Realisation(cree_par=par, **champs)
+    realisation = Realisation(cree_par=par, commune=commune, **champs)
     _controler(realisation)
     realisation.reference = prochaine_reference(Realisation, PREFIXE_REFERENCE)
     realisation.save()
@@ -98,6 +112,7 @@ def modifier_realisation(realisation, *, par, **changements):
     etait_publiee = realisation.publie
     elements = changements.pop("medias", None)
     relations = {nom: changements.pop(nom) for nom in RELATIONS if nom in changements}
+    _controler_relations(realisation.commune, relations)
     for coordonnee in ("latitude", "longitude"):
         if coordonnee in changements:
             changements[coordonnee] = _coordonnee(changements[coordonnee])

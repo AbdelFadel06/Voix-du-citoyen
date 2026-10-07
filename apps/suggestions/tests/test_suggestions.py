@@ -13,6 +13,7 @@ from apps.referentiel.models import Secteur
 from apps.suggestions import services
 from apps.suggestions.models import Soutien, Suggestion, SuiviSuggestion
 from apps.territoire.models import Arrondissement, Quartier
+from conftest import commune_de_test
 
 pytestmark = pytest.mark.django_db
 
@@ -58,7 +59,7 @@ def voisin(creer_utilisateur):
 
 @pytest.fixture
 def agent(creer_utilisateur):
-    service = ServiceMunicipal.objects.create(nom="Marchés")
+    service = ServiceMunicipal.objects.create(commune=commune_de_test(), nom="Marchés")
     return creer_utilisateur(role=Utilisateur.Role.AGENT, service=service, nom="Ahouansou", prenoms="Rodrigue")
 
 
@@ -300,9 +301,9 @@ class TestConsultation:
         def auteur(utilisateur):
             return client_connecte(utilisateur).get(URL).json()["donnees"][0]["auteur"]
 
-        assert auteur(voisin) == {"nom_affiche": "Afiavi H.", "id": None, "nom": None, "prenoms": None, "telephone": None}
+        assert auteur(voisin) is None
         assert auteur(citoyen)["telephone"] == str(citoyen.telephone)
-        assert auteur(agent)["telephone"] == str(citoyen.telephone)
+        assert auteur(agent) is None  # anonyme pour la mairie aussi
         assert auteur(creer_utilisateur(role=Utilisateur.Role.ORGANISATION)) is None
 
     def test_tri_par_soutiens_et_je_soutiens(self, creer, citoyen, voisin, client_connecte, creer_utilisateur):

@@ -30,7 +30,8 @@ l'utilisateur connecté.
 
 ### Se connecter et appeler l'API
 
-1. `POST /api/v1/auth/login/` renvoie deux jetons :
+1. `POST /api/v1/auth/login/` — les **citoyens** avec `telephone` + `password`, la **mairie
+   et les organisations** avec `email` + `password` — renvoie deux jetons :
    - `access` : à envoyer dans chaque requête, valable **30 minutes** ;
    - `refresh` : sert à obtenir de nouveaux jetons, valable **30 jours**.
 2. Envoyer l'en-tête `Authorization: Bearer <access>` sur les endpoints protégés.
@@ -133,7 +134,9 @@ Une erreur 500 ne révèle jamais de détail technique.
 
 - Une organisation **suspendue** ou dont l'habilitation a **expiré** perd l'accès
   immédiatement, même avec un jeton encore valide (`ORGANISATION_NON_HABILITEE`).
-- Une organisation ne voit jamais l'identité ni le téléphone des citoyens.
+- **Les citoyens restent anonymes** : personne (ni la mairie, ni les organisations, ni les
+  autres citoyens) ne reçoit le nom ou le téléphone de l'auteur d'un signalement ou d'une
+  suggestion. Seul l'auteur voit son identité sur ses propres dossiers.
 
 ---
 

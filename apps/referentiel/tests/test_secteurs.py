@@ -6,6 +6,7 @@ from django.urls import reverse
 from apps.accounts.models import Organisation, ServiceMunicipal, Utilisateur
 from apps.core.codes_erreur import CodeErreur
 from apps.referentiel.models import Secteur
+from conftest import commune_de_test
 
 pytestmark = pytest.mark.django_db
 
@@ -14,7 +15,7 @@ URL = reverse("referentiel:secteurs")
 
 @pytest.fixture
 def secteurs():
-    voirie = ServiceMunicipal.objects.create(nom="Voirie")
+    voirie = ServiceMunicipal.objects.create(commune=commune_de_test(), nom="Voirie")
     return [
         Secteur.objects.create(
             nom="Voirie", code="VOIRIE", pour_signalement=True, ordre=2, service_par_defaut=voirie
@@ -84,6 +85,6 @@ class TestListe:
     def test_accessible_a_tous_les_roles(self, secteurs, creer_utilisateur, client_connecte, role):
         assert client_connecte(creer_utilisateur(role=role)).get(URL).status_code == 200
 
-    def test_lecture_seule(self, secteurs, creer_utilisateur, client_connecte):
+    def test_creation_reservee_aux_admins(self, secteurs, creer_utilisateur, client_connecte):
         reponse = client_connecte(creer_utilisateur()).post(URL, {"nom": "X"}, format="json")
-        assert reponse.status_code == 405
+        assert reponse.status_code == 403

@@ -1,0 +1,55 @@
+# Blueprint Render : API Voix du Citoyen en préproduction (formule gratuite).
+# Render → New → Blueprint → choisir ce dépôt. Voir README.md, section « Render ».
+services:
+  - type: web
+    name: voix-du-citoyen-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerCommand: ./deploy/render-start.sh
+    healthCheckPath: /api/v1/sante/
+    autoDeploy: true
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.render
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: voix-du-citoyen-db
+          property: connectionString
+      # Codes OTP et notifications affichés dans les journaux Render (pas de vrai fournisseur).
+      - key: SMS_BACKEND
+        value: apps.core.sms.backends.console.ConsoleSMS
+      - key: PUSH_BACKEND
+        value: apps.core.push.backends.console.ConsolePush
+      # 512 Mo de mémoire en gratuit : 2 processus suffisent.
+      - key: GUNICORN_WORKERS
+        value: "2"
+      # Le proxy de Render transmet X-Forwarded-Proto depuis des adresses variables.
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      # Origines du client web autorisées (ex. http://localhost:5173), séparées par des virgules.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # Premier compte admin, créé au premier démarrage.
+      - key: DJANGO_SUPERUSER_TELEPHONE
+        sync: false
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_NOM
+        sync: false
+      - key: DJANGO_SUPERUSER_PRENOMS
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false
+
+databases:
+  - name: voix-du-citoyen-db
+    plan: free
+    region: frankfurt
+    databaseName: voix_citoyen
+    user: voix_citoyen

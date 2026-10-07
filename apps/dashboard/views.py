@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.core.codes_erreur import CodeErreur
+from apps.core.communes import commune_imposee
 from apps.core.permissions import EstMairieOuOrganisation, est_personnel_mairie
 from apps.core.reponses import reponse_succes
 from apps.core.schema import EXEMPLES_AUTH_REQUISE, TAG_TABLEAUX_DE_BORD, enveloppe, erreurs, exemple_erreur, exemple_succes
@@ -21,6 +22,9 @@ from .serializers import (
 )
 
 ACCES = """
+**Commune** : la mairie d'une commune ne voit que la sienne ; les organisations et les admins
+de la plateforme voient toutes les communes ensemble, ou une seule avec `?commune=<id>`.
+
 **Filtres communs** : `date_debut`, `date_fin` (date de création des dossiers), `secteur`, `quartier`.
 
 **Connecté** : agents, admins mairie et organisations habilitées. Les organisations ne voient
@@ -48,7 +52,11 @@ class VueTableau(APIView):
     def filtres(self, request):
         entree = self.filtres_class(data=request.query_params)
         entree.is_valid(raise_exception=True)
-        return dict(entree.validated_data)
+        filtres = dict(entree.validated_data)
+        imposee = commune_imposee(request.user)
+        if imposee is not None:
+            filtres["commune"] = imposee  # la mairie d'une commune ne voit que la sienne
+        return filtres
 
     @property
     def mairie(self):

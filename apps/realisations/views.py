@@ -4,6 +4,7 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from apps.core.codes_erreur import CodeErreur
+from apps.core.communes import cloisonner
 from apps.core.permissions import EstAgentMairie, est_personnel_mairie
 from apps.core.reponses import reponse_succes
 from apps.core.schema import (
@@ -187,7 +188,8 @@ class RealisationViewSet(
     def get_queryset(self):
         medias = RealisationMedia.objects.select_related("media").order_by("ordre", "id")
         queryset = (
-            Realisation.objects.select_related("secteur")
+            cloisonner(Realisation.objects.all(), self.request.user)
+            .select_related("commune", "secteur")
             .prefetch_related("quartiers__arrondissement", Prefetch("medias", queryset=medias))
             .distinct()
         )

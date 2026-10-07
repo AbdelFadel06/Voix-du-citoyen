@@ -14,7 +14,7 @@ from apps.medias.serializers import MediaResumeSerializer, MediaSerializer
 from apps.referentiel.models import Secteur
 from apps.referentiel.serializers import SecteurResumeSerializer
 from apps.territoire.models import Quartier
-from apps.territoire.serializers import QuartierResumeSerializer
+from apps.territoire.serializers import CommuneResumeSerializer, QuartierResumeSerializer
 
 from .models import Signalement, SuiviSignalement
 
@@ -33,11 +33,12 @@ CHOIX_STATUTS_CIBLES = [choix for choix in Statut.choices if choix[0] != Statut.
 class SignalementListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
     champs_mairie = ("priorite", "service_assigne", "agent_assigne")
 
+    commune = CommuneResumeSerializer(help_text="Commune du signalement (celle de son auteur).")
     secteur = SecteurResumeSerializer(help_text="Secteur du problème.")
     quartier = QuartierResumeSerializer(help_text="Quartier du signalement.")
     medias = MediaResumeSerializer(many=True, help_text="Aperçus des photos et vidéos (miniatures uniquement).")
     a_description_audio = serializers.SerializerMethodField(help_text="Vrai si une description vocale est jointe.")
-    auteur = serializers.SerializerMethodField(help_text="Auteur, ou `null` (anonyme, ou consultation par une organisation).")
+    auteur = serializers.SerializerMethodField(help_text="Identité de l'auteur, envoyée **seulement à l'auteur lui-même** ; `null` pour tous les autres (mairie comprise).")
     est_auteur = serializers.SerializerMethodField(help_text="Vrai si l'utilisateur connecté est l'auteur.")
     service_assigne = ServiceResumeSerializer(
         allow_null=True, help_text="Service chargé du dossier (agents et admins uniquement)."
@@ -53,6 +54,7 @@ class SignalementListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "reference",
             "titre",
             "statut",
+            "commune",
             "secteur",
             "quartier",
             "mode_localisation",
@@ -61,7 +63,6 @@ class SignalementListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "repere",
             "medias",
             "a_description_audio",
-            "anonyme",
             "auteur",
             "est_auteur",
             "priorite",
@@ -80,7 +81,6 @@ class SignalementListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "latitude": {"help_text": "Latitude (mode GPS), sinon `null`."},
             "longitude": {"help_text": "Longitude (mode GPS), sinon `null`."},
             "repere": {"help_text": "Repère donné par le citoyen, ex. « derrière le marché Dantokpa »."},
-            "anonyme": {"help_text": "Vrai si l'auteur a demandé à rester anonyme vis-à-vis du public."},
             "priorite": {"help_text": "Priorité de traitement (agents et admins uniquement)."},
             "cree_le": {"help_text": "Date d'envoi."},
             "maj_le": {"help_text": "Date de la dernière mise à jour."},
@@ -194,9 +194,6 @@ class SignalementCreateSerializer(serializers.Serializer):
         help_text="Identifiants des photos et vidéos envoyées avec `POST /medias/` : "
         "au moins 1, au plus 4 photos et 1 vidéo.",
     )
-    anonyme = serializers.BooleanField(
-        default=False, help_text="Masquer l'auteur au public (la mairie le voit toujours)."
-    )
     mode_localisation = serializers.ChoiceField(
         choices=Mode.choices,
         help_text="`GPS` : position choisie sur la carte. `MANUEL` : quartier et repère seulement.",
@@ -217,8 +214,8 @@ class SignalementCreateSerializer(serializers.Serializer):
     quartier = serializers.PrimaryKeyRelatedField(
         queryset=Quartier.objects.filter(actif=True).select_related("arrondissement__commune"),
         error_messages={"does_not_exist": "Ce quartier n'existe pas ou n'est plus actif."},
-        help_text="Identifiant du quartier, **toujours obligatoire**. En mode GPS, utiliser la "
-        "proposition de `GET /quartiers/proche/`, confirmée par le citoyen.",
+        help_text="Identifiant du quartier, **toujours obligatoire**, dans la commune du citoyen. En mode "
+        "GPS, utiliser la proposition de `GET /quartiers/proche/`, confirmée par le citoyen.",
     )
     repere = serializers.CharField(
         max_length=255, required=False, allow_blank=True,

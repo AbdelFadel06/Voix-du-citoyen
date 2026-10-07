@@ -2,6 +2,7 @@ from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Lower
 from django.utils import timezone
 from phonenumber_field.modelfields import PhoneNumberField
 from phonenumber_field.phonenumber import to_python
@@ -9,8 +10,17 @@ from phonenumber_field.phonenumber import to_python
 from apps.core.models import ModeleHorodate
 
 
+def normaliser_email(email):
+    """Adresse e-mail en minuscules et sans espaces (None si vide) : une adresse = un compte."""
+    email = (email or "").strip().lower()
+    return email or None
+
+
 class UtilisateurManager(BaseUserManager):
-    """Manager basé sur le numéro de téléphone (identifiant de connexion)."""
+    """
+    Manager basé sur le numéro de téléphone (identifiant interne du compte). Les citoyens se
+    connectent avec leur téléphone, le personnel et les organisations avec leur e-mail.
+    """
 
     use_in_migrations = True
 
@@ -27,8 +37,10 @@ class UtilisateurManager(BaseUserManager):
         for champ, message in champs_obligatoires.items():
             if not str(extra_fields.get(champ) or "").strip():
                 raise ValueError(message)
-        if extra_fields.get("email"):
-            extra_fields["email"] = self.normalize_email(extra_fields["email"])
+        extra_fields["email"] = normaliser_email(extra_fields.get("email"))
+        role = extra_fields.get("role", Utilisateur.Role.CITOYEN)
+        if role != Utilisateur.Role.CITOYEN and not extra_fields["email"]:
+            raise ValueError("L'adresse e-mail est obligatoire pour la mairie et les organisations.")
         utilisateur = self.model(telephone=numero, **extra_fields)
         utilisateur.set_password(password)
         utilisateur.save(using=self._db)
@@ -58,6 +70,9 @@ class Utilisateur(ModeleHorodate, AbstractBaseUser, PermissionsMixin):
         ADMIN_MAIRIE = "ADMIN_MAIRIE", "Administrateur mairie"
         ORGANISATION = "ORGANISATION", "Organisation"
 
+    # Rôles qui se connectent avec leur e-mail (les citoyens utilisent leur téléphone).
+    ROLES_CONNEXION_EMAIL = (Role.AGENT, Role.ADMIN_MAIRIE, Role.ORGANISATION)
+
     telephone = PhoneNumberField(
         "téléphone",
         unique=True,
@@ -65,9 +80,24 @@ class Utilisateur(ModeleHorodate, AbstractBaseUser, PermissionsMixin):
     )
     nom = models.CharField("nom", max_length=100)
     prenoms = models.CharField("prénoms", max_length=150)
-    email = models.EmailField("adresse e-mail", null=True, blank=True)
+    email = models.EmailField(
+        "adresse e-mail",
+        null=True,
+        blank=True,
+        help_text="Identifiant de connexion de la mairie et des organisations ; facultatif pour les citoyens.",
+    )
     role = models.CharField(
         "rôle", max_length=20, choices=Role.choices, default=Role.CITOYEN
+    )
+    commune = models.ForeignKey(
+        "territoire.Commune",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="habitants",
+        verbose_name="commune de résidence",
+        help_text="Citoyen : commune choisie à l'inscription. Agent / admin : commune de sa mairie "
+        "(vide pour un admin de la plateforme, qui voit toutes les communes).",
     )
     quartier_residence = models.ForeignKey(
         "territoire.Quartier",
@@ -101,7 +131,7 @@ class Utilisateur(ModeleHorodate, AbstractBaseUser, PermissionsMixin):
     objects = UtilisateurManager()
 
     USERNAME_FIELD = "telephone"
-    REQUIRED_FIELDS = ["nom", "prenoms"]
+    REQUIRED_FIELDS = ["email", "nom", "prenoms"]
 
     class Meta:
         verbose_name = "utilisateur"
@@ -121,6 +151,22 @@ class Utilisateur(ModeleHorodate, AbstractBaseUser, PermissionsMixin):
                     "Un compte organisation doit être rattaché à une organisation."
                 ),
             ),
+            models.CheckConstraint(
+                condition=~models.Q(role="AGENT") | models.Q(commune__isnull=False),
+                name="utilisateur_agent_avec_commune",
+                violation_error_message="Un agent doit être rattaché à la commune de sa mairie.",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(role="CITOYEN") | (models.Q(email__isnull=False) & ~models.Q(email="")),
+                name="utilisateur_personnel_avec_email",
+                violation_error_message="L'adresse e-mail est obligatoire pour la mairie et les organisations.",
+            ),
+            models.UniqueConstraint(
+                Lower("email"),
+                condition=models.Q(email__isnull=False),
+                name="utilisateur_email_unique",
+                violation_error_message="Un compte existe déjà avec cette adresse e-mail.",
+            ),
         ]
 
     def __str__(self):
@@ -134,11 +180,16 @@ class Utilisateur(ModeleHorodate, AbstractBaseUser, PermissionsMixin):
 
     def clean(self):
         super().clean()
-        if self.email:
-            self.email = self.__class__.objects.normalize_email(self.email)
+        self.email = normaliser_email(self.email)
         erreurs = {}
+        if self.role in self.ROLES_CONNEXION_EMAIL and not self.email:
+            erreurs["email"] = "L'adresse e-mail est obligatoire pour la mairie et les organisations."
         if self.role == self.Role.AGENT and not self.service_id:
             erreurs["service"] = "Un agent doit être rattaché à un service municipal."
+        if self.role == self.Role.AGENT and not self.commune_id:
+            erreurs["commune"] = "Un agent doit être rattaché à la commune de sa mairie."
+        if self.quartier_residence_id and self.commune_id and self.quartier_residence.arrondissement.commune_id != self.commune_id:
+            erreurs["quartier_residence"] = "Ce quartier n'est pas dans la commune choisie."
         if self.role == self.Role.ORGANISATION and not self.organisation_id:
             erreurs["organisation"] = (
                 "Un compte organisation doit être rattaché à une organisation."
@@ -234,12 +285,15 @@ class Organisation(ModeleHorodate):
 
 
 class ServiceMunicipal(ModeleHorodate):
-    nom = models.CharField(
-        "nom",
-        max_length=150,
-        unique=True,
-        error_messages={"unique": "Un service porte déjà ce nom."},
+    """Service d'une mairie : chaque commune a les siens."""
+
+    commune = models.ForeignKey(
+        "territoire.Commune",
+        on_delete=models.PROTECT,
+        related_name="services",
+        verbose_name="commune",
     )
+    nom = models.CharField("nom", max_length=150)
     description = models.TextField("description", blank=True)
     responsable = models.ForeignKey(
         "accounts.Utilisateur",
@@ -254,6 +308,13 @@ class ServiceMunicipal(ModeleHorodate):
     class Meta:
         verbose_name = "service municipal"
         verbose_name_plural = "services municipaux"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["commune", "nom"],
+                name="service_unique_par_commune",
+                violation_error_message="Un service porte déjà ce nom dans cette commune.",
+            ),
+        ]
         ordering = ["nom"]
 
     def __str__(self):

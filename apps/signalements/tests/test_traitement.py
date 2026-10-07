@@ -5,6 +5,7 @@ from apps.accounts.models import ServiceMunicipal, Utilisateur
 from apps.core.codes_erreur import CodeErreur
 from apps.signalements import services
 from apps.signalements.models import Signalement, SuiviSignalement
+from conftest import commune_de_test
 
 pytestmark = pytest.mark.django_db
 
@@ -119,7 +120,7 @@ class TestChangementDeStatut:
 
 class TestAssignation:
     def test_a_un_agent_assigne_aussi_son_service(self, mairie, signalement, creer_utilisateur):
-        eclairage = ServiceMunicipal.objects.create(nom="Éclairage public")
+        eclairage = ServiceMunicipal.objects.create(commune=commune_de_test(), nom="Éclairage public")
         electricien = creer_utilisateur(role=Utilisateur.Role.AGENT, service=eclairage)
         donnees = ok(poster(mairie, signalement, "assigner", {"agent": electricien.pk}))["donnees"]
         assert donnees["service_assigne"]["id"] == eclairage.pk
@@ -129,12 +130,12 @@ class TestAssignation:
         assert suivi.visible_citoyen
 
     def test_a_un_service_seul(self, mairie, signalement):
-        service = ServiceMunicipal.objects.create(nom="Hygiène")
+        service = ServiceMunicipal.objects.create(commune=commune_de_test(), nom="Hygiène")
         donnees = ok(poster(mairie, signalement, "assigner", {"service": service.pk}))["donnees"]
         assert (donnees["service_assigne"]["nom"], donnees["agent_assigne"]) == ("Hygiène", None)
 
     def test_agent_d_un_autre_service(self, mairie, signalement, agent):
-        autre = ServiceMunicipal.objects.create(nom="Hygiène")
+        autre = ServiceMunicipal.objects.create(commune=commune_de_test(), nom="Hygiène")
         reponse = poster(mairie, signalement, "assigner", {"service": autre.pk, "agent": agent.pk})
         assert "agent" in erreur(reponse, CodeErreur.VALIDATION_ERREUR, 400)["details"]
 

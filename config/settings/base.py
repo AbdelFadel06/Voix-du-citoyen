@@ -97,18 +97,19 @@ ASGI_APPLICATION = "config.asgi.application"
 # Base de données (PostgreSQL)
 # ---------------------------------------------------------------------------
 
-DATABASES = {
-    "default": {
+# Hébergeurs (Render…) : une seule variable DATABASE_URL ; sinon les variables POSTGRES_*.
+if env("DATABASE_URL", default=None):
+    BASE_DE_DONNEES = env.db_url("DATABASE_URL")
+else:
+    BASE_DE_DONNEES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": env("POSTGRES_DB"),
         "USER": env("POSTGRES_USER"),
         "PASSWORD": env("POSTGRES_PASSWORD"),
         "HOST": env("POSTGRES_HOST"),
         "PORT": env("POSTGRES_PORT"),
-        "CONN_MAX_AGE": 60,
-        "CONN_HEALTH_CHECKS": True,
     }
-}
+DATABASES = {"default": {**BASE_DE_DONNEES, "CONN_MAX_AGE": 60, "CONN_HEALTH_CHECKS": True}}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -235,6 +236,8 @@ SPECTACULAR_SETTINGS = {
         "StatutSignalementEnum": "apps.signalements.models.Signalement.Statut",
         "NouveauStatutSignalementEnum": "apps.signalements.serializers.CHOIX_STATUTS_CIBLES",
         "StatutMediaEnum": "apps.medias.models.Media.Statut",
+        "RoleEnum": "apps.accounts.models.Utilisateur.Role",
+        "RolePersonnelEnum": "apps.accounts.serializers.ROLES_PERSONNEL",
         "TypeMediaEnum": "apps.medias.models.Media.Type",
         "TypeNotificationEnum": "apps.notifications.models.Notification.Type",
         "StatutRealisationEnum": "apps.realisations.models.Realisation.Statut",
