@@ -1,0 +1,10 @@
+.env
+venv/
+**/__pycache__/
+*.pyc
+media/
+staticfiles/
+.pytest_cache/
+.coverage
+htmlcov/
+CLAUDE.md

@@ -1,0 +1,9 @@
+code;nom;description;icone;couleur;pour_signalement;pour_suggestion;pour_realisation;service_par_defaut;ordre
+VOIRIE;Voirie;Routes, nids-de-poule, ponts et dalots;route;#F57C00;oui;oui;oui;;1
+ECLAIRAGE;Éclairage public;Lampadaires en panne ou absents;lampadaire;#FBC02D;oui;oui;oui;;2
+INSALUBRITE;Insalubrité;Dépôts sauvages, ordures non ramassées;poubelle;#6D4C41;oui;oui;oui;;3
+INONDATION;Inondation et caniveaux;Caniveaux bouchés, eaux stagnantes;goutte;#1E88E5;oui;oui;oui;;4
+EAU;Eau potable;Bornes-fontaines, fuites, coupures;robinet;#00ACC1;oui;oui;oui;;5
+SECURITE;Sécurité;Zones dangereuses, éclairage insuffisant la nuit;bouclier;#E53935;oui;oui;non;;6
+MARCHES;Marchés;Aménagement et propreté des marchés;panier;#8E24AA;oui;oui;oui;;7
+CADRE_VIE;Cadre de vie;Espaces verts, places publiques, loisirs;arbre;#43A047;non;oui;oui;;8
