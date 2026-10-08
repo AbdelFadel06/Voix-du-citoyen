@@ -4,6 +4,7 @@ Ce que chaque rôle voit d'un dossier citoyen (signalement, suggestion) — CLAU
 - Identité de l'auteur : **personne** ne la voit, sauf l'auteur lui-même sur ses propres
   dossiers (ni la mairie, ni les autres citoyens, ni les organisations).
 - Agents et admins mairie : champs internes et notes internes.
+- Organisations : seulement les signalements de leurs secteurs d'intervention.
 """
 
 from rest_framework import serializers
@@ -13,6 +14,23 @@ from apps.accounts.models import Utilisateur
 from .permissions import est_personnel_mairie
 
 ROLES_MAIRIE = (Utilisateur.Role.AGENT, Utilisateur.Role.ADMIN_MAIRIE)
+
+
+def secteurs_autorises(utilisateur):
+    """
+    Secteurs d'intervention d'une organisation (liste d'identifiants, éventuellement vide),
+    ou None pour les autres rôles, qui ne sont pas limités par secteur.
+    """
+    if getattr(utilisateur, "role", None) != Utilisateur.Role.ORGANISATION:
+        return None
+    if utilisateur.organisation_id is None:
+        return []
+    return list(utilisateur.organisation.secteurs.values_list("pk", flat=True))
+
+
+def limiter_aux_secteurs(queryset, secteurs, champ="secteur"):
+    """Applique `secteurs_autorises` (None : pas de limite ; liste vide : rien)."""
+    return queryset if secteurs is None else queryset.filter(**{f"{champ}__in": secteurs})
 
 
 def utilisateur_connecte(serializer):

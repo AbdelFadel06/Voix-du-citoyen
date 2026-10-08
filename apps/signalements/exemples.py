@@ -68,7 +68,6 @@ LISTE_CITOYEN = {
 # Vu par un agent ou un admin mairie.
 LISTE_MAIRIE = {
     **LISTE_CITOYEN,
-    "priorite": "HAUTE",
     "service_assigne": {"id": 3, "nom": "Voirie et assainissement"},
     "agent_assigne": {"id": 7, "nom": "Ahouansou", "prenoms": "Rodrigue"},
 }

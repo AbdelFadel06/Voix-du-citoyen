@@ -31,7 +31,7 @@ CHOIX_STATUTS_CIBLES = [choix for choix in Statut.choices if choix[0] != Statut.
 
 
 class SignalementListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
-    champs_mairie = ("priorite", "service_assigne", "agent_assigne")
+    champs_mairie = ("service_assigne", "agent_assigne")
 
     commune = CommuneResumeSerializer(help_text="Commune du signalement (celle de son auteur).")
     secteur = SecteurResumeSerializer(help_text="Secteur du problème.")
@@ -65,7 +65,6 @@ class SignalementListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "a_description_audio",
             "auteur",
             "est_auteur",
-            "priorite",
             "service_assigne",
             "agent_assigne",
             "cree_le",
@@ -81,7 +80,6 @@ class SignalementListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "latitude": {"help_text": "Latitude (mode GPS), sinon `null`."},
             "longitude": {"help_text": "Longitude (mode GPS), sinon `null`."},
             "repere": {"help_text": "Repère donné par le citoyen, ex. « derrière le marché Dantokpa »."},
-            "priorite": {"help_text": "Priorité de traitement (agents et admins uniquement)."},
             "cree_le": {"help_text": "Date d'envoi."},
             "maj_le": {"help_text": "Date de la dernière mise à jour."},
         }

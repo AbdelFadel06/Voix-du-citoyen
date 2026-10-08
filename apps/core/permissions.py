@@ -45,6 +45,15 @@ class EstAdminMairie(BasePermission):
         return _a_le_role(request.user, Role.ADMIN_MAIRIE)
 
 
+class EstCitoyenOuMairie(BasePermission):
+    """Tout sauf les organisations (ex. suggestions, réservées aux citoyens et à la mairie)."""
+
+    message = "Les suggestions sont réservées aux citoyens et à la mairie."
+
+    def has_permission(self, request, view):
+        return _a_le_role(request.user, Role.CITOYEN, Role.AGENT, Role.ADMIN_MAIRIE)
+
+
 class EstOrganisationHabilitee(BasePermission):
     message = "Action réservée aux organisations habilitées."
 

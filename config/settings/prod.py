@@ -4,11 +4,11 @@ Voir README.md, section « Déploiement ».
 """
 
 from .base import *  # noqa: F401,F403
-from .base import env
+from .base import liste
 
 DEBUG = False
 EST_PRODUCTION = True
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
+ALLOWED_HOSTS = liste("ALLOWED_HOSTS", "DJANGO_ALLOWED_HOSTS")
 
 # Fichiers statiques (admin) servis par l'application elle-même (WhiteNoise), avec ou sans
 # nginx devant : noms versionnés, compression, cache longue durée.
@@ -37,8 +37,8 @@ X_FRAME_OPTIONS = "DENY"
 # ---------------------------------------------------------------------------
 
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+CORS_ALLOWED_ORIGINS = liste("CORS_ALLOWED_ORIGINS")
+CSRF_TRUSTED_ORIGINS = liste("CSRF_TRUSTED_ORIGINS", "DJANGO_CSRF_TRUSTED_ORIGINS")
 
 # ---------------------------------------------------------------------------
 # Cache partagé entre les processus gunicorn : sans lui, chaque processus aurait son propre

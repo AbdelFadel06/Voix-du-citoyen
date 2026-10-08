@@ -3,6 +3,10 @@ Settings communs à tous les environnements.
 
 Toute valeur sensible ou dépendante de l'environnement est lue depuis `.env`
 via django-environ. Les fichiers `dev.py` et `prod.py` surchargent ce socle.
+
+Plusieurs noms sont acceptés pour certaines variables : ceux du projet (`SECRET_KEY`,
+`POSTGRES_DB`…) et ceux fournis par le serveur de LE BAROMETRE (`DJANGO_SECRET_KEY`,
+`DB_NAME`…), voir README « Serveur LE BAROMETRE ».
 """
 
 from datetime import timedelta
@@ -17,9 +21,25 @@ env = environ.Env(
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
-SECRET_KEY = env("SECRET_KEY")
-DEBUG = env("DEBUG")
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
+
+def premiere_variable(*noms, default=None):
+    """Valeur de la première variable d'environnement renseignée parmi `noms`."""
+    for nom in noms:
+        valeur = env.str(nom, default="")
+        if valeur != "":
+            return valeur
+    if default is None:
+        raise environ.ImproperlyConfigured(f"Variable d'environnement manquante : {' ou '.join(noms)}")
+    return default
+
+
+def liste(*noms):
+    return [v.strip() for v in premiere_variable(*noms, default="").split(",") if v.strip()]
+
+
+SECRET_KEY = premiere_variable("SECRET_KEY", "DJANGO_SECRET_KEY")
+DEBUG = premiere_variable("DEBUG", "DJANGO_DEBUG", default="False").lower() in ("true", "1", "yes", "on")
+ALLOWED_HOSTS = liste("ALLOWED_HOSTS", "DJANGO_ALLOWED_HOSTS")
 
 # ---------------------------------------------------------------------------
 # Applications
@@ -103,11 +123,11 @@ if env("DATABASE_URL", default=None):
 else:
     BASE_DE_DONNEES = {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("POSTGRES_DB"),
-        "USER": env("POSTGRES_USER"),
-        "PASSWORD": env("POSTGRES_PASSWORD"),
-        "HOST": env("POSTGRES_HOST"),
-        "PORT": env("POSTGRES_PORT"),
+        "NAME": premiere_variable("POSTGRES_DB", "DB_NAME"),
+        "USER": premiere_variable("POSTGRES_USER", "DB_USER"),
+        "PASSWORD": premiere_variable("POSTGRES_PASSWORD", "DB_PASSWORD"),
+        "HOST": premiere_variable("POSTGRES_HOST", "DB_HOST", default="127.0.0.1"),
+        "PORT": premiere_variable("POSTGRES_PORT", "DB_PORT", default="5432"),
     }
 DATABASES = {"default": {**BASE_DE_DONNEES, "CONN_MAX_AGE": 60, "CONN_HEALTH_CHECKS": True}}
 
@@ -141,9 +161,10 @@ PHONENUMBER_DB_FORMAT = "E164"
 # ---------------------------------------------------------------------------
 
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+# Sur un serveur avec nginx, les dossiers servis sont indiqués par STATIC_ROOT / MEDIA_ROOT.
+STATIC_ROOT = premiere_variable("STATIC_ROOT", default=str(BASE_DIR / "staticfiles"))
 MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = premiere_variable("MEDIA_ROOT", default=str(BASE_DIR / "media"))
 
 # Les FileField / ImageField passent par le stockage "default" : disque local par défaut,
 # stockage objet S3-compatible (MinIO, AWS, Scaleway…) avec USE_S3=True. Le code métier

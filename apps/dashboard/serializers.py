@@ -115,9 +115,7 @@ class SyntheseSignalementsSerializer(serializers.Serializer):
 class SyntheseSuggestionsSerializer(serializers.Serializer):
     total = _entier("Nombre de suggestions.")
     nb_soutiens = _entier("Total des soutiens reçus.")
-    pertinentes = serializers.IntegerField(
-        required=False, help_text="Suggestions cochées « pertinentes » (agents et admins uniquement)."
-    )
+    pertinentes = _entier("Suggestions cochées « pertinentes ».")
 
 
 class StatutsRealisationSerializer(serializers.Serializer):
@@ -141,7 +139,9 @@ class SyntheseRealisationsSerializer(serializers.Serializer):
 
 class SyntheseSerializer(serializers.Serializer):
     signalements = SyntheseSignalementsSerializer(help_text="Chiffres des signalements.")
-    suggestions = SyntheseSuggestionsSerializer(help_text="Chiffres des suggestions.")
+    suggestions = SyntheseSuggestionsSerializer(
+        required=False, help_text="Chiffres des suggestions (**mairie uniquement** : absent pour une organisation)."
+    )
     realisations = SyntheseRealisationsSerializer(help_text="Chiffres des réalisations.")
 
 
@@ -163,7 +163,9 @@ class _CompteursSerializer(serializers.Serializer):
     signalements_ouverts = _entier("Signalements non clos.")
     signalements_resolus = _entier("Signalements résolus.")
     taux_resolution = _pourcentage("Part des signalements résolus")
-    suggestions = _entier("Suggestions.")
+    suggestions = serializers.IntegerField(
+        required=False, help_text="Suggestions (**mairie uniquement** : absent pour une organisation)."
+    )
     realisations = _entier("Réalisations.")
 
 
@@ -179,7 +181,10 @@ class PointEvolutionSerializer(serializers.Serializer):
     periode = serializers.DateField(help_text="Premier jour de la période (jour, lundi ou 1er du mois).")
     signalements_crees = _entier("Signalements envoyés pendant la période.")
     signalements_resolus = _entier("Signalements résolus pendant la période.")
-    suggestions_creees = _entier("Suggestions envoyées pendant la période.")
+    suggestions_creees = serializers.IntegerField(
+        required=False,
+        help_text="Suggestions envoyées pendant la période (**mairie uniquement** : absent pour une organisation).",
+    )
 
 
 class EvolutionSerializer(serializers.Serializer):

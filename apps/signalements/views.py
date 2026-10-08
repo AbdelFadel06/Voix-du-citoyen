@@ -8,6 +8,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from apps.core.codes_erreur import CodeErreur
 from apps.core.communes import cloisonner
 from apps.core.permissions import EstAgentMairie, EstCitoyen, est_personnel_mairie
+from apps.core.visibilite import limiter_aux_secteurs, secteurs_autorises
 from apps.core.reponses import reponse_succes
 from apps.core.schema import (
     EXEMPLE_PAGE_INEXISTANTE,
@@ -47,8 +48,8 @@ DESCRIPTION_VISIBILITE = """
 - **Les citoyens restent anonymes** : `auteur` vaut `null` pour tout le monde, **mairie
   comprise**. Seul l'auteur voit son identité sur ses propres signalements (`est_auteur: true`).
   La mairie lui répond par `/repondre/` et les changements de statut (notifications).
-- **Agents et admins** : en plus, la priorité, le service et l'agent assignés.
-- **Citoyens et organisations** : ni priorité, ni assignation, ni notes internes.
+- **Agents et admins** : en plus, le service et l'agent assignés.
+- **Citoyens et organisations** : ni assignation, ni notes internes.
 """
 
 
@@ -195,6 +196,8 @@ class SignalementViewSet(
             ).prefetch_related("medias"),
             self.request.user,
         )
+        # Une organisation ne voit que les signalements de ses secteurs d'intervention.
+        queryset = limiter_aux_secteurs(queryset, secteurs_autorises(self.request.user))
         if self.action == "mes_signalements" and not getattr(self, "swagger_fake_view", False):
             queryset = queryset.filter(auteur=self.request.user)
         if self.action in ACTIONS_DETAIL:

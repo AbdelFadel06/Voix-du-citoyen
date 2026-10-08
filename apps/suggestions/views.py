@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.core.codes_erreur import CodeErreur
 from apps.core.communes import cloisonner
-from apps.core.permissions import EstAgentMairie, EstCitoyen, est_personnel_mairie
+from apps.core.permissions import EstAgentMairie, EstCitoyen, EstCitoyenOuMairie, est_personnel_mairie
 from apps.core.reponses import reponse_succes
 from apps.core.schema import (
     EXEMPLE_PAGE_INEXISTANTE,
@@ -45,6 +45,11 @@ EXEMPLE_RESERVE_MAIRIE = exemple_erreur(
 EXEMPLE_RESERVE_CITOYENS = exemple_erreur(
     CodeErreur.PERMISSION_REFUSEE, "Action réservée aux citoyens.", nom="Réservé aux citoyens"
 )
+EXEMPLE_ORGANISATION = exemple_erreur(
+    CodeErreur.PERMISSION_REFUSEE,
+    "Les suggestions sont réservées aux citoyens et à la mairie.",
+    nom="Compte organisation",
+)
 DESCRIPTION_VISIBILITE = """
 **Ce que voit chaque rôle**
 - **Les citoyens restent anonymes** : `auteur` vaut `null` pour tout le monde, **mairie
@@ -53,7 +58,10 @@ DESCRIPTION_VISIBILITE = """
 - **Citoyens** : `je_soutiens` indique s'ils soutiennent déjà la suggestion.
 
 Les suggestions n'ont **pas de statut**. La mairie coche celles qu'elle juge pertinentes ;
-cette marque n'est **jamais** montrée aux citoyens ni aux organisations.
+cette marque n'est **jamais** montrée aux citoyens.
+
+**Organisations** : aucun accès aux suggestions (`PERMISSION_REFUSEE`), qui restent un
+échange entre les citoyens et leur mairie.
 """
 
 
@@ -74,7 +82,7 @@ le filtre est ignoré pour les autres rôles).
 **Recherche** (`recherche`) : référence, titre, description.
 **Tri** (`tri`) : `cree_le`, `maj_le`, `nb_soutiens`, `reference` (`-` pour l'ordre décroissant).
 {DESCRIPTION_VISIBILITE}
-**Connecté** : tous les rôles.
+**Connecté** : citoyens, agents et admins mairie.
 """,
         responses={200: SuggestionListSerializer(many=True), **erreurs(401, 403, 404)},
         examples=[
@@ -82,6 +90,7 @@ le filtre est ignoré pour les autres rôles).
             exemple_element_liste("Pour toute la commune", exemples.LISTE_COMMUNE),
             exemple_element_liste("Vue par la mairie", exemples.LISTE_MAIRIE),
             EXEMPLE_PAGE_INEXISTANTE,
+            EXEMPLE_ORGANISATION,
             *EXEMPLES_AUTH_REQUISE,
         ],
     ),
@@ -94,13 +103,14 @@ Détail complet : description, photos en taille réelle, **réponse officielle**
 
 Dans l'historique, les notes internes ne sont visibles que par les agents et admins.
 {DESCRIPTION_VISIBILITE}
-**Connecté** : tous les rôles.
+**Connecté** : citoyens, agents et admins mairie.
 """,
         responses={200: enveloppe(SuggestionDetailSerializer), **erreurs(401, 403, 404)},
         examples=[
             exemple_succes("Vue par un citoyen", exemples.DETAIL),
             exemple_succes("Vue par la mairie", exemples.DETAIL_MAIRIE),
             EXEMPLE_INTROUVABLE,
+            EXEMPLE_ORGANISATION,
             *EXEMPLES_AUTH_REQUISE,
         ],
     ),
@@ -158,7 +168,7 @@ class SuggestionViewSet(
             return [IsAuthenticated(), EstCitoyen()]
         if self.action in ACTIONS_MAIRIE:
             return [IsAuthenticated(), EstAgentMairie()]
-        return [IsAuthenticated()]
+        return [IsAuthenticated(), EstCitoyenOuMairie()]
 
     def get_serializer_class(self):
         return SuggestionDetailSerializer if self.action in ACTIONS_DETAIL else SuggestionListSerializer

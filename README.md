@@ -20,6 +20,7 @@ Django 5.2 · Django REST Framework · PostgreSQL 17 · authentification JWT.
 7. [Organisation du code et règles du projet](#7-organisation-du-code-et-règles-du-projet)
 8. [Déploiement en production](#8-déploiement-en-production)
 9. [Version de test en ligne (Render)](#9-version-de-test-en-ligne-render)
+10. [Serveur LE BAROMETRE](#10-serveur-le-barometre)
 
 ---
 
@@ -400,3 +401,43 @@ Ensuite, chaque `git push` sur `main` redéploie automatiquement.
   passer à une formule payante ou en recréer une (les données sont perdues).
 - **Ce n'est pas la production** : `config.settings.render` autorise l'affichage des codes
   dans les journaux. La vraie production utilise `config.settings.prod`, qui l'interdit.
+
+---
+
+## 10. Serveur LE BAROMETRE
+
+L'API de `api.piecitizenvoice.com` tourne sur le serveur de LE BAROMETRE, qui a ses propres
+outils (commande `site`, nginx, PM2). Les accès et la procédure complète sont dans le
+**guide de déploiement interne** (confidentiel, non versionné ici).
+
+Le projet lit directement les variables fournies par ce serveur, en plus des siennes :
+
+| Serveur | Équivalent du projet |
+|---|---|
+| `DJANGO_SECRET_KEY`, `DJANGO_DEBUG` | `SECRET_KEY`, `DEBUG` |
+| `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` | `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` |
+| `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | `POSTGRES_*` |
+| `STATIC_ROOT`, `MEDIA_ROOT` | dossiers `staticfiles/` et `media/` par défaut |
+
+Variables à **ajouter** dans `site env api.piecitizenvoice.com` :
+
+```bash
+DJANGO_SETTINGS_MODULE=config.settings.preprod
+CORS_ALLOWED_ORIGINS=https://piecitizenvoice.com,https://www.piecitizenvoice.com
+SMS_BACKEND=apps.core.sms.backends.console.ConsoleSMS
+PUSH_BACKEND=apps.core.push.backends.console.ConsolePush
+```
+
+`config.settings.preprod` = la production, mais les codes OTP et les notifications
+s'affichent dans les journaux (`site logs api.piecitizenvoice.com`) tant qu'aucun vrai
+fournisseur SMS / push n'est branché. Ensuite : `config.settings.prod` et les vrais backends.
+
+Après le premier `site deploy`, une seule fois :
+
+```bash
+site manage api.piecitizenvoice.com createcachetable
+site manage api.piecitizenvoice.com createsuperuser
+```
+
+Tâches quotidiennes à faire planifier par l'administration (ou à lancer à la main) :
+`site manage api.piecitizenvoice.com purger_medias` et `… flushexpiredtokens`.

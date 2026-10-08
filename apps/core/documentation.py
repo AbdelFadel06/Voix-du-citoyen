@@ -130,7 +130,7 @@ Une erreur 500 ne révèle jamais de détail technique.
 | `CITOYEN` | Mobile | Créer un compte, signaler, suggérer, soutenir une suggestion, suivre ses dossiers, voir les réalisations |
 | `AGENT` | Web | Traiter les signalements et suggestions, publier des réalisations |
 | `ADMIN_MAIRIE` | Web | Tout ce que fait l'agent + gestion des agents, services, secteurs, quartiers et organisations |
-| `ORGANISATION` | Web | **Lecture seule** : signalements, suggestions, réalisations, tableaux de bord |
+| `ORGANISATION` | Web | **Lecture seule** : signalements **de ses secteurs d'intervention**, réalisations, tableaux de bord (pas de suggestions) |
 
 - Une organisation **suspendue** ou dont l'habilitation a **expiré** perd l'accès
   immédiatement, même avec un jeton encore valide (`ORGANISATION_NON_HABILITEE`).

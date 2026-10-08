@@ -227,3 +227,32 @@ class TestCommandes:
         call_command("charger_services", str(fichier), commune="PKO")
         call_command("charger_services", str(fichier), commune="COT")
         assert sorted(ServiceMunicipal.objects.values_list("commune__code", flat=True)) == ["COT", "PKO"]
+
+
+class TestSecteursDesOrganisations:
+    """Une organisation ne voit que les signalements de ses secteurs d'intervention."""
+
+    def test_liste_detail_et_tableaux(self, creer_utilisateur, client_connecte, televerser, parakou):
+        voirie = Secteur.objects.create(nom="Voirie", code="VOIRIE", pour_signalement=True)
+        eau = Secteur.objects.create(nom="Eau", code="EAU", pour_signalement=True)
+        auteur = creer_utilisateur(commune=parakou)
+
+        def signaler(secteur):
+            dossier, _ = signalements.creer_signalement(
+                auteur=auteur, secteur=secteur, quartier=quartier_de(parakou), mode_localisation="MANUEL",
+                medias_ids=[televerser(auteur).id], titre="T", description_texte="D", repere="R",
+            )
+            return dossier
+
+        route, fuite = signaler(voirie), signaler(eau)
+        ong = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION, secteurs=[eau]))
+        assert [d["id"] for d in ong.get(URL_SIGNALEMENTS).json()["donnees"]] == [fuite.pk]
+        assert ong.get(reverse("signalements:signalement-detail", args=[route.pk])).status_code == 404
+        assert ong.get(reverse("dashboard:synthese")).json()["donnees"]["signalements"]["total"] == 1
+        lignes = ong.get(reverse("dashboard:par-secteur")).json()["donnees"]
+        assert [l["secteur"]["code"] for l in lignes] == ["EAU"] and "suggestions" not in lignes[0]
+
+    def test_sans_secteur_aucun_signalement(self, creer_utilisateur, client_connecte, signaler, parakou):
+        signaler(creer_utilisateur(commune=parakou))
+        ong = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION, secteurs=[]))
+        assert ong.get(URL_SIGNALEMENTS).json()["donnees"] == []

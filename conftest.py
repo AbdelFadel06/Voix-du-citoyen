@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 from apps.accounts import services
 from apps.accounts.models import Organisation, ServiceMunicipal, Utilisateur
 from apps.core.sms.backends.memoire import MemoireSMS
+from apps.referentiel.models import Secteur
 
 MOT_DE_PASSE = "Barometre!2026"
 _numeros = itertools.count(1)
@@ -59,7 +60,8 @@ def nouveau_telephone():
 
 @pytest.fixture
 def creer_utilisateur(db, nouveau_telephone):
-    def _creer(role=Utilisateur.Role.CITOYEN, **kwargs):
+    def _creer(role=Utilisateur.Role.CITOYEN, secteurs=None, **kwargs):
+        """`secteurs` : secteurs d'intervention d'une organisation créée ici (défaut : tous ceux qui existent)."""
         kwargs.setdefault("telephone", nouveau_telephone())
         kwargs.setdefault("nom", "Dossou")
         kwargs.setdefault("prenoms", "Koffi")
@@ -81,6 +83,7 @@ def creer_utilisateur(db, nouveau_telephone):
                 numero_enregistrement=f"ONG-{kwargs['telephone']}",
                 statut_habilitation=Organisation.StatutHabilitation.HABILITEE,
             )
+            kwargs["organisation"].secteurs.set(Secteur.objects.all() if secteurs is None else secteurs)
         return Utilisateur.objects.create_user(password=MOT_DE_PASSE, role=role, **kwargs)
 
     return _creer

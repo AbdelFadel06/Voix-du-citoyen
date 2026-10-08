@@ -251,6 +251,7 @@ class Organisation(ModeleHorodate):
         blank=True,
         related_name="organisations",
         verbose_name="secteurs d'intervention",
+        help_text="L'organisation ne voit que les signalements de ces secteurs (aucun secteur : aucun signalement).",
     )
 
     class Meta:

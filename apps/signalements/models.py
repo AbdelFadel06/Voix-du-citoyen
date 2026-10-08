@@ -17,12 +17,6 @@ class Signalement(ModeleHorodate):
         REJETE = "REJETE", "Rejeté"
         DOUBLON = "DOUBLON", "Doublon"
 
-    class Priorite(models.TextChoices):
-        BASSE = "BASSE", "Basse"
-        NORMALE = "NORMALE", "Normale"
-        HAUTE = "HAUTE", "Haute"
-        URGENTE = "URGENTE", "Urgente"
-
     # Statuts après lesquels le dossier est clos.
     STATUTS_CLOTURES = {Statut.RESOLU, Statut.REJETE, Statut.DOUBLON}
 
@@ -71,9 +65,6 @@ class Signalement(ModeleHorodate):
     )
     repere = models.CharField("repère", max_length=255, blank=True)
     statut = models.CharField("statut", max_length=20, choices=Statut.choices, default=Statut.SOUMIS)
-    priorite = models.CharField(
-        "priorité", max_length=10, choices=Priorite.choices, default=Priorite.NORMALE
-    )
     service_assigne = models.ForeignKey(
         "accounts.ServiceMunicipal",
         on_delete=models.SET_NULL,

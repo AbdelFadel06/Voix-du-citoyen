@@ -109,9 +109,9 @@ class TestSynthese:
             "brouillons": 1,
         }
 
-    def test_une_organisation_ne_voit_ni_brouillons_ni_pertinence(self, organisation):
+    def test_une_organisation_ne_voit_ni_brouillons_ni_suggestions(self, organisation):
         donnees = lire(organisation, "synthese")
-        assert "pertinentes" not in donnees["suggestions"]
+        assert "suggestions" not in donnees
         assert "brouillons" not in donnees["realisations"]
         assert donnees["realisations"]["total"] == 1 and donnees["realisations"]["budget_total"] == 1000000
 

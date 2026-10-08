@@ -14,7 +14,7 @@ pytestmark = pytest.mark.django_db
 
 URL_LISTE = reverse("signalements:signalement-list")
 URL_MES = reverse("signalements:signalement-mes-signalements")
-CHAMPS_MAIRIE = {"priorite", "service_assigne", "agent_assigne"}
+CHAMPS_MAIRIE = {"service_assigne", "agent_assigne"}
 
 
 def url_detail(signalement):
@@ -58,7 +58,6 @@ class TestVisibiliteDeLAuteur:
         client = client_connecte(agent)
         element = liste(client)["donnees"][0]
         assert element["auteur"] is None
-        assert element["priorite"] == "NORMALE"
         assert element["service_assigne"] == {"id": voirie.pk, "nom": voirie.nom}
         detail = client.get(url_detail(Signalement.objects.get())).json()["donnees"]
         assert detail["auteur"] is None

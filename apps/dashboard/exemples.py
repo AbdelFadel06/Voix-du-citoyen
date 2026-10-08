@@ -21,7 +21,6 @@ SYNTHESE_MAIRIE = {
 }
 SYNTHESE_ORGANISATION = {
     "signalements": _SIGNALEMENTS,
-    "suggestions": {"total": 88, "nb_soutiens": 1742},
     "realisations": _REALISATIONS,
 }
 

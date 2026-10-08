@@ -18,13 +18,13 @@ class SuiviSignalementInline(admin.TabularInline):
 class SignalementAdmin(admin.ModelAdmin):
     """Consultation ; le traitement (statut, assignation, réponses) passe par l'API."""
 
-    list_display = ["reference", "titre", "statut", "priorite", "secteur", "quartier", "service_assigne", "cree_le"]
-    list_filter = ["commune", "statut", "priorite", "secteur", "mode_localisation"]
+    list_display = ["reference", "titre", "statut", "secteur", "quartier", "service_assigne", "cree_le"]
+    list_filter = ["commune", "statut", "secteur", "mode_localisation"]
     search_fields = ["reference", "titre", "description_texte", "repere", "auteur__telephone"]
     list_select_related = ["secteur", "quartier", "service_assigne"]
     date_hierarchy = "cree_le"
     inlines = [SuiviSignalementInline]
-    # Seuls le titre (correction d'un titre généré) et la priorité sont modifiables ici.
+    # Seul le titre (correction d'un titre généré) est modifiable ici.
     readonly_fields = [
         "reference", "titre_genere", "description_texte", "description_audio", "secteur", "auteur",
         "mode_localisation", "latitude", "longitude", "precision_gps", "quartier", "repere",

@@ -241,12 +241,11 @@ class TestPertinence:
         assert [(d["id"], d["est_pertinente"]) for d in donnees] == [(retenue.pk, True)]
         assert [d["id"] for d in client.get(URL, {"est_pertinente": "false"}).json()["donnees"]] == [autre.pk]
 
-    @pytest.mark.parametrize("role", [Utilisateur.Role.CITOYEN, Utilisateur.Role.ORGANISATION])
-    def test_jamais_visible_ni_filtrable_hors_mairie(self, creer, citoyen, creer_utilisateur, client_connecte, role):
+    def test_jamais_visible_ni_filtrable_hors_mairie(self, creer, citoyen, creer_utilisateur, client_connecte):
         retenue = creer(citoyen)
         creer(citoyen)
         services.marquer_pertinente(retenue)
-        client = client_connecte(creer_utilisateur(role=role))
+        client = client_connecte(creer_utilisateur())
         # Le filtre est ignoré : on ne peut pas deviner les suggestions cochées.
         donnees = client.get(URL, {"est_pertinente": "true"}).json()["donnees"]
         assert len(donnees) == 2
@@ -304,7 +303,12 @@ class TestConsultation:
         assert auteur(voisin) is None
         assert auteur(citoyen)["telephone"] == str(citoyen.telephone)
         assert auteur(agent) is None  # anonyme pour la mairie aussi
-        assert auteur(creer_utilisateur(role=Utilisateur.Role.ORGANISATION)) is None
+
+    def test_aucun_acces_pour_les_organisations(self, suggestion, creer_utilisateur, client_connecte):
+        client = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION))
+        for reponse in (client.get(URL), client.get(url(suggestion))):
+            assert reponse.status_code == 403
+            assert reponse.json()["erreur"]["code"] == CodeErreur.PERMISSION_REFUSEE
 
     def test_tri_par_soutiens_et_je_soutiens(self, creer, citoyen, voisin, client_connecte, creer_utilisateur):
         peu, beaucoup = creer(citoyen, titre="Peu"), creer(citoyen, titre="Beaucoup")

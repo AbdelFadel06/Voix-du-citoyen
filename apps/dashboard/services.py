@@ -5,8 +5,9 @@ Tous les calculs se font en base (COUNT, AVG, SUM, regroupements) : quelques req
 tableau, quel que soit le volume de dossiers. Les filtres (`date_debut`, `date_fin`,
 `secteur`, `quartier`) s'appliquent à la date de création de chaque dossier.
 
-Confidentialité : les organisations ne voient ni les réalisations en brouillon ni la marque
-« pertinente » des suggestions ; aucun tableau ne contient d'auteur.
+Confidentialité : les organisations (`mairie=False`) ne voient que les signalements de leurs
+secteurs d'intervention (`filtres["secteurs_autorises"]`), aucune suggestion et aucune
+réalisation en brouillon ; aucun tableau ne contient d'auteur.
 """
 
 from datetime import date, timedelta
@@ -15,6 +16,7 @@ from django.db.models import Avg, Count, F, Q, Sum
 from django.db.models.functions import TruncDay, TruncMonth, TruncWeek
 from django.utils import timezone
 
+from apps.core.visibilite import limiter_aux_secteurs
 from apps.realisations.models import Realisation
 from apps.referentiel.models import Secteur
 from apps.signalements.models import Signalement
@@ -47,7 +49,8 @@ def _filtrer(queryset, filtres, champ_quartier):
 
 
 def signalements(filtres):
-    return _filtrer(Signalement.objects.all(), filtres, "quartier")
+    queryset = _filtrer(Signalement.objects.all(), filtres, "quartier")
+    return limiter_aux_secteurs(queryset, filtres.get("secteurs_autorises"))
 
 
 def suggestions(filtres):
@@ -81,10 +84,6 @@ def synthese(filtres, mairie):
         delai=Avg(F("date_resolution") - F("cree_le"))
     )["delai"]
 
-    idees = suggestions(filtres).aggregate(total=Count("id"), soutiens=Sum("nb_soutiens"), pertinentes=Count("id", filter=Q(est_pertinente=True)))
-    bloc_suggestions = {"total": idees["total"], "nb_soutiens": idees["soutiens"] or 0}
-    if mairie:
-        bloc_suggestions["pertinentes"] = idees["pertinentes"]
 
     travaux = realisations(filtres, mairie)
     chiffres = Realisation.objects.filter(pk__in=travaux.values("pk")).aggregate(
@@ -108,7 +107,7 @@ def synthese(filtres, mairie):
     if mairie:
         bloc_realisations["brouillons"] = chiffres["total"] - chiffres["publiees"]
 
-    return {
+    resultat = {
         "signalements": {
             "total": total,
             "par_statut": {statut: par_statut.get(statut, 0) for statut in StatutSignalement.values},
@@ -117,9 +116,16 @@ def synthese(filtres, mairie):
             "taux_resolution": _pourcentage(resolus, total),
             "delai_moyen_resolution_jours": _jours(delai),
         },
-        "suggestions": bloc_suggestions,
         "realisations": bloc_realisations,
     }
+    if mairie:  # les suggestions restent entre les citoyens et la mairie
+        idees = suggestions(filtres).aggregate(
+            total=Count("id"), soutiens=Sum("nb_soutiens"), pertinentes=Count("id", filter=Q(est_pertinente=True))
+        )
+        resultat["suggestions"] = {
+            "total": idees["total"], "nb_soutiens": idees["soutiens"] or 0, "pertinentes": idees["pertinentes"]
+        }
+    return resultat
 
 
 def _compter_par(queryset, champ):
@@ -131,25 +137,35 @@ def par_secteur(filtres, mairie):
     totaux = _compter_par(dossiers, "secteur")
     resolus = _compter_par(dossiers.filter(statut=StatutSignalement.RESOLU), "secteur")
     ouverts = _compter_par(dossiers.filter(statut__in=STATUTS_OUVERTS), "secteur")
-    idees = _compter_par(suggestions(filtres), "secteur")
+    idees = _compter_par(suggestions(filtres), "secteur") if mairie else {}
     travaux = _compter_par(realisations(filtres, mairie), "secteur")
 
     secteurs = Secteur.objects.filter(Q(actif=True) | Q(pk__in=set(totaux) | set(idees) | set(travaux)))
+    secteurs = limiter_aux_secteurs(secteurs, filtres.get("secteurs_autorises"), champ="pk")
     if filtres.get("secteur"):
         secteurs = secteurs.filter(pk=filtres["secteur"].pk)
     lignes = [
         {
             "secteur": {"id": s.pk, "nom": s.nom, "code": s.code, "couleur": s.couleur},
-            "signalements": totaux.get(s.pk, 0),
-            "signalements_ouverts": ouverts.get(s.pk, 0),
-            "signalements_resolus": resolus.get(s.pk, 0),
-            "taux_resolution": _pourcentage(resolus.get(s.pk, 0), totaux.get(s.pk, 0)),
-            "suggestions": idees.get(s.pk, 0),
-            "realisations": travaux.get(s.pk, 0),
+            **_compteurs(s.pk, totaux, ouverts, resolus, travaux, idees if mairie else None),
         }
         for s in secteurs
     ]
-    return sorted(lignes, key=lambda l: (-l["signalements"], -l["suggestions"], l["secteur"]["nom"]))
+    return sorted(lignes, key=lambda l: (-l["signalements"], -l.get("suggestions", 0), l["secteur"]["nom"]))
+
+
+def _compteurs(cle, totaux, ouverts, resolus, travaux, idees):
+    """Colonnes communes à par_secteur et par_quartier ; `idees=None` : pas de suggestions."""
+    ligne = {
+        "signalements": totaux.get(cle, 0),
+        "signalements_ouverts": ouverts.get(cle, 0),
+        "signalements_resolus": resolus.get(cle, 0),
+        "taux_resolution": _pourcentage(resolus.get(cle, 0), totaux.get(cle, 0)),
+        "realisations": travaux.get(cle, 0),
+    }
+    if idees is not None:
+        ligne["suggestions"] = idees.get(cle, 0)
+    return ligne
 
 
 def par_quartier(filtres, mairie, arrondissement=None):
@@ -157,7 +173,7 @@ def par_quartier(filtres, mairie, arrondissement=None):
     totaux = _compter_par(dossiers, "quartier")
     resolus = _compter_par(dossiers.filter(statut=StatutSignalement.RESOLU), "quartier")
     ouverts = _compter_par(dossiers.filter(statut__in=STATUTS_OUVERTS), "quartier")
-    idees = _compter_par(suggestions(filtres).exclude(quartier=None), "quartier")
+    idees = _compter_par(suggestions(filtres).exclude(quartier=None), "quartier") if mairie else {}
     travaux = _compter_par(realisations(filtres, mairie), "quartiers")
 
     actifs = set(totaux) | set(idees) | set(travaux)
@@ -167,16 +183,11 @@ def par_quartier(filtres, mairie, arrondissement=None):
     lignes = [
         {
             "quartier": {"id": q.pk, "nom": q.nom, "arrondissement": q.arrondissement.nom},
-            "signalements": totaux.get(q.pk, 0),
-            "signalements_ouverts": ouverts.get(q.pk, 0),
-            "signalements_resolus": resolus.get(q.pk, 0),
-            "taux_resolution": _pourcentage(resolus.get(q.pk, 0), totaux.get(q.pk, 0)),
-            "suggestions": idees.get(q.pk, 0),
-            "realisations": travaux.get(q.pk, 0),
+            **_compteurs(q.pk, totaux, ouverts, resolus, travaux, idees if mairie else None),
         }
         for q in quartiers
     ]
-    return sorted(lignes, key=lambda l: (-l["signalements"], -l["suggestions"], l["quartier"]["nom"]))
+    return sorted(lignes, key=lambda l: (-l["signalements"], -l.get("suggestions", 0), l["quartier"]["nom"]))
 
 
 def debut_de_periode(jour, periode):
@@ -214,7 +225,7 @@ def nombre_de_periodes(debut, fin, periode):
     return nombre
 
 
-def evolution(filtres, periode):
+def evolution(filtres, periode, mairie=True):
     debut, fin = bornes_evolution(filtres, periode)
     filtres = {**filtres, "date_debut": debut, "date_fin": fin}
     tronquer = TRONCATURES[periode]
@@ -225,22 +236,22 @@ def evolution(filtres, periode):
 
     crees = par_periode(signalements(filtres), "cree_le")
     resolus = par_periode(
-        _filtrer(Signalement.objects.all(), {k: v for k, v in filtres.items() if k not in ("date_debut", "date_fin")}, "quartier")
+        signalements({k: v for k, v in filtres.items() if k not in ("date_debut", "date_fin")})
         .filter(statut=StatutSignalement.RESOLU, date_resolution__date__gte=debut, date_resolution__date__lte=fin),
         "date_resolution",
     )
-    idees = par_periode(suggestions(filtres), "cree_le")
+    idees = par_periode(suggestions(filtres), "cree_le") if mairie else None
 
     points, jour = [], debut
     while jour <= fin:
-        points.append(
-            {
-                "periode": jour,
-                "signalements_crees": crees.get(jour, 0),
-                "signalements_resolus": resolus.get(jour, 0),
-                "suggestions_creees": idees.get(jour, 0),
-            }
-        )
+        point = {
+            "periode": jour,
+            "signalements_crees": crees.get(jour, 0),
+            "signalements_resolus": resolus.get(jour, 0),
+        }
+        if idees is not None:
+            point["suggestions_creees"] = idees.get(jour, 0)
+        points.append(point)
         jour = _periode_suivante(jour, periode)
     return {"periode": periode, "date_debut": debut, "date_fin": fin, "points": points}
 
