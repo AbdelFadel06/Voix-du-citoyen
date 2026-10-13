@@ -256,3 +256,34 @@ class TestSecteursDesOrganisations:
         signaler(creer_utilisateur(commune=parakou))
         ong = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION, secteurs=[]))
         assert ong.get(URL_SIGNALEMENTS).json()["donnees"] == []
+
+
+class TestCommunesDesOrganisations:
+    """Une organisation ne voit que les signalements de ses communes ET de ses secteurs."""
+
+    def test_liste_detail_tableaux_et_profil(self, creer_utilisateur, client_connecte, signaler, secteur, parakou, cotonou):
+        a_parakou = signaler(creer_utilisateur(commune=parakou))
+        a_cotonou = signaler(creer_utilisateur(commune=cotonou))
+        ong = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION, communes=[parakou], secteurs=[secteur]))
+
+        assert [d["id"] for d in ong.get(URL_SIGNALEMENTS).json()["donnees"]] == [a_parakou.pk]
+        # ?commune= ne permet pas d'en sortir.
+        assert ong.get(URL_SIGNALEMENTS, {"commune": cotonou.pk}).json()["donnees"] == []
+        assert ong.get(reverse("signalements:signalement-detail", args=[a_cotonou.pk])).status_code == 404
+        assert ong.get(reverse("dashboard:synthese")).json()["donnees"]["signalements"]["total"] == 1
+        organisation = ong.get(reverse("accounts:me")).json()["donnees"]["organisation"]
+        assert organisation["communes"] == [{"id": parakou.pk, "nom": "Parakou"}]
+        assert [s["code"] for s in organisation["secteurs"]] == ["VOIRIE"]
+
+    def test_plusieurs_communes(self, creer_utilisateur, client_connecte, signaler, secteur, parakou, cotonou):
+        signaler(creer_utilisateur(commune=parakou))
+        signaler(creer_utilisateur(commune=cotonou))
+        ong = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION, communes=[parakou, cotonou], secteurs=[secteur]))
+        assert ong.get(URL_SIGNALEMENTS).json()["pagination"]["total"] == 2
+        assert ong.get(URL_SIGNALEMENTS, {"commune": cotonou.pk}).json()["pagination"]["total"] == 1
+
+    def test_sans_commune_aucun_signalement(self, creer_utilisateur, client_connecte, signaler, secteur, parakou):
+        signaler(creer_utilisateur(commune=parakou))
+        ong = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION, communes=[], secteurs=[secteur]))
+        assert ong.get(URL_SIGNALEMENTS).json()["donnees"] == []
+        assert ong.get(reverse("dashboard:synthese")).json()["donnees"]["signalements"]["total"] == 0

@@ -9,6 +9,7 @@ from apps.accounts import services
 from apps.accounts.models import Organisation, ServiceMunicipal, Utilisateur
 from apps.core.sms.backends.memoire import MemoireSMS
 from apps.referentiel.models import Secteur
+from apps.territoire.models import Commune
 
 MOT_DE_PASSE = "Barometre!2026"
 _numeros = itertools.count(1)
@@ -60,8 +61,11 @@ def nouveau_telephone():
 
 @pytest.fixture
 def creer_utilisateur(db, nouveau_telephone):
-    def _creer(role=Utilisateur.Role.CITOYEN, secteurs=None, **kwargs):
-        """`secteurs` : secteurs d'intervention d'une organisation créée ici (défaut : tous ceux qui existent)."""
+    def _creer(role=Utilisateur.Role.CITOYEN, secteurs=None, communes=None, **kwargs):
+        """
+        `secteurs` / `communes` : périmètre d'intervention d'une organisation créée ici
+        (défaut : tous les secteurs et toutes les communes qui existent).
+        """
         kwargs.setdefault("telephone", nouveau_telephone())
         kwargs.setdefault("nom", "Dossou")
         kwargs.setdefault("prenoms", "Koffi")
@@ -84,6 +88,9 @@ def creer_utilisateur(db, nouveau_telephone):
                 statut_habilitation=Organisation.StatutHabilitation.HABILITEE,
             )
             kwargs["organisation"].secteurs.set(Secteur.objects.all() if secteurs is None else secteurs)
+            if communes is None:
+                commune_de_test()
+            kwargs["organisation"].communes.set(Commune.objects.all() if communes is None else communes)
         return Utilisateur.objects.create_user(password=MOT_DE_PASSE, role=role, **kwargs)
 
     return _creer

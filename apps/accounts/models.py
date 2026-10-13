@@ -253,6 +253,13 @@ class Organisation(ModeleHorodate):
         verbose_name="secteurs d'intervention",
         help_text="L'organisation ne voit que les signalements de ces secteurs (aucun secteur : aucun signalement).",
     )
+    communes = models.ManyToManyField(
+        "territoire.Commune",
+        blank=True,
+        related_name="organisations",
+        verbose_name="communes d'intervention",
+        help_text="L'organisation ne voit que les signalements de ces communes (aucune commune : aucun signalement).",
+    )
 
     class Meta:
         verbose_name = "organisation"

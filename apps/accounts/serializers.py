@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from phonenumber_field.serializerfields import PhoneNumberField
 from rest_framework import serializers
 
+from apps.referentiel.models import Secteur
 from apps.territoire.models import Commune, Quartier
 from apps.territoire.serializers import CommuneResumeSerializer
 
@@ -52,10 +53,33 @@ def champ_quartier_residence():
 # ---------------------------------------------------------------------------
 
 
+class SecteurInterventionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Secteur
+        fields = ["id", "nom", "code"]
+        extra_kwargs = {
+            "id": {"help_text": "Identifiant du secteur."},
+            "nom": {"help_text": "Nom du secteur."},
+            "code": {"help_text": "Code du secteur."},
+        }
+
+
 class OrganisationResumeSerializer(serializers.ModelSerializer):
+    communes = CommuneResumeSerializer(
+        many=True,
+        read_only=True,
+        help_text="Communes d'intervention : l'organisation ne voit que les signalements de ces communes "
+        "(utile pour proposer le filtre `?commune=`).",
+    )
+    secteurs = SecteurInterventionSerializer(
+        many=True,
+        read_only=True,
+        help_text="Secteurs d'intervention : l'organisation ne voit que les signalements de ces secteurs.",
+    )
+
     class Meta:
         model = Organisation
-        fields = ["id", "nom", "sigle"]
+        fields = ["id", "nom", "sigle", "communes", "secteurs"]
         extra_kwargs = {
             "id": {"help_text": "Identifiant de l'organisation."},
             "nom": {"help_text": "Nom complet de l'organisation."},

@@ -6,7 +6,8 @@ tableau, quel que soit le volume de dossiers. Les filtres (`date_debut`, `date_f
 `secteur`, `quartier`) s'appliquent à la date de création de chaque dossier.
 
 Confidentialité : les organisations (`mairie=False`) ne voient que les signalements de leurs
-secteurs d'intervention (`filtres["secteurs_autorises"]`), aucune suggestion et aucune
+communes et secteurs d'intervention (`filtres["communes_autorisees"]`,
+`filtres["secteurs_autorises"]`), aucune suggestion et aucune
 réalisation en brouillon ; aucun tableau ne contient d'auteur.
 """
 
@@ -16,7 +17,7 @@ from django.db.models import Avg, Count, F, Q, Sum
 from django.db.models.functions import TruncDay, TruncMonth, TruncWeek
 from django.utils import timezone
 
-from apps.core.visibilite import limiter_aux_secteurs
+from apps.core.visibilite import limiter_aux_communes, limiter_aux_secteurs
 from apps.realisations.models import Realisation
 from apps.referentiel.models import Secteur
 from apps.signalements.models import Signalement
@@ -50,7 +51,8 @@ def _filtrer(queryset, filtres, champ_quartier):
 
 def signalements(filtres):
     queryset = _filtrer(Signalement.objects.all(), filtres, "quartier")
-    return limiter_aux_secteurs(queryset, filtres.get("secteurs_autorises"))
+    queryset = limiter_aux_secteurs(queryset, filtres.get("secteurs_autorises"))
+    return limiter_aux_communes(queryset, filtres.get("communes_autorisees"))
 
 
 def suggestions(filtres):

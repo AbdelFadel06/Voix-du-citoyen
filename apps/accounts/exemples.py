@@ -46,7 +46,13 @@ ORGANISATION = {
     "email": "contact@ong-eau.bj",
     "role": "ORGANISATION",
     "quartier_residence": None,
-    "organisation": {"id": 2, "nom": "ONG Eau Pour Tous", "sigle": "EPT"},
+    "organisation": {
+        "id": 2,
+        "nom": "ONG Eau Pour Tous",
+        "sigle": "EPT",
+        "communes": [{"id": 1, "nom": "Parakou"}],
+        "secteurs": [{"id": 4, "nom": "Eau et assainissement", "code": "EAU"}],
+    },
 }
 
 JETONS = {"access": ACCESS, "refresh": REFRESH, "utilisateur": CITOYEN}

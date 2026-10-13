@@ -97,7 +97,7 @@ class OrganisationAdmin(admin.ModelAdmin):
     ]
     list_filter = ["type", "statut_habilitation"]
     search_fields = ["nom", "sigle", "numero_enregistrement"]
-    filter_horizontal = ["secteurs"]
+    filter_horizontal = ["communes", "secteurs"]
     # Le statut ne change que par les actions « Suspendre » / « Réhabiliter ».
     readonly_fields = [
         "statut_habilitation",
@@ -116,6 +116,7 @@ class OrganisationAdmin(admin.ModelAdmin):
                     "sigle",
                     "type",
                     "numero_enregistrement",
+                    "communes",
                     "secteurs",
                     "logo",
                 ]

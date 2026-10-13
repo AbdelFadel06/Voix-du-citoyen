@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from apps.core.codes_erreur import CodeErreur
 from apps.core.communes import commune_imposee
 from apps.core.permissions import EstMairieOuOrganisation, est_personnel_mairie
-from apps.core.visibilite import secteurs_autorises
+from apps.core.visibilite import communes_autorisees, secteurs_autorises
 from apps.core.reponses import reponse_succes
 from apps.core.schema import EXEMPLES_AUTH_REQUISE, TAG_TABLEAUX_DE_BORD, enveloppe, erreurs, exemple_erreur, exemple_succes
 
@@ -29,7 +29,7 @@ de la plateforme voient toutes les communes ensemble, ou une seule avec `?commun
 **Filtres communs** : `date_debut`, `date_fin` (date de création des dossiers), `secteur`, `quartier`.
 
 **Connecté** : agents, admins mairie et organisations habilitées. Les organisations ne voient
-que les **signalements de leurs secteurs d'intervention**, **aucune suggestion** (les champs
+que les **signalements de leurs communes et secteurs d'intervention**, **aucune suggestion** (les champs
 `suggestions…` sont absents de leurs réponses) et pas les réalisations en brouillon.
 """
 EXEMPLES_ERREURS = [
@@ -58,8 +58,9 @@ class VueTableau(APIView):
         imposee = commune_imposee(request.user)
         if imposee is not None:
             filtres["commune"] = imposee  # la mairie d'une commune ne voit que la sienne
-        # Organisations : seulement les signalements de leurs secteurs d'intervention.
+        # Organisations : seulement les signalements de leurs communes et secteurs d'intervention.
         filtres["secteurs_autorises"] = secteurs_autorises(request.user)
+        filtres["communes_autorisees"] = communes_autorisees(request.user)
         return filtres
 
     @property

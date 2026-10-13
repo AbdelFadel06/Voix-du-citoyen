@@ -5,11 +5,12 @@ La plateforme peut servir plusieurs communes. Chaque compte est rattaché à sa 
 - **citoyen** : commune choisie à l'inscription ;
 - **agent / admin mairie** : commune de sa mairie ;
 - **admin de la plateforme** : admin sans commune, il voit toutes les communes ;
-- **organisation** : aucune commune, elle peut intervenir partout.
+- **organisation** : pas de commune propre, mais des communes d'intervention (une ou plusieurs).
 
 Les citoyens, agents et admins rattachés à une commune ne voient et ne traitent que les
 dossiers de leur commune. Les organisations et les admins de la plateforme voient toutes
-les communes et peuvent filtrer avec `?commune=<id>`.
+les communes et peuvent filtrer avec `?commune=<id>`. Une organisation reste limitée à ses communes
+d'intervention (`Organisation.communes`, voir `apps/core/visibilite.py`).
 """
 
 import django_filters
