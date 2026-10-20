@@ -40,6 +40,7 @@ HISTORIQUE = [
         "type_evenement": "REPONSE",
         "commentaire": "Merci : 10 bancs sont prévus au budget 2027.",
         "par_la_mairie": True,
+        "organisation": None,
         "cree_le": "2026-10-02T15:40:00+01:00",
     },
 ]
@@ -49,6 +50,7 @@ HISTORIQUE_MAIRIE = [
         "type_evenement": "NOTE_INTERNE",
         "commentaire": "Voir le devis du menuisier de Zogbadjè.",
         "par_la_mairie": True,
+        "organisation": None,
         "auteur_nom": "Rodrigue Ahouansou",
         "visible_citoyen": False,
         "cree_le": "2026-09-20T09:00:00+01:00",

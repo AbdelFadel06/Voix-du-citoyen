@@ -1,6 +1,7 @@
 import django_filters
 
 from apps.core.communes import FiltreCommune
+from apps.accounts.models import Utilisateur
 from apps.core.permissions import est_personnel_mairie
 
 from .models import Realisation
@@ -23,15 +24,25 @@ class RealisationFilter(django_filters.FilterSet):
     commune = FiltreCommune()
     publie = django_filters.BooleanFilter(
         method="filtrer_publication",
-        help_text="`false` : uniquement les brouillons. **Agents et admins uniquement** "
-        "(les autres ne voient que les réalisations publiées).",
+        help_text="`false` : uniquement les brouillons (ceux de la mairie pour un agent, ceux de son "
+        "organisation pour une organisation). Ignoré pour les autres, qui ne voient que les publiées.",
+    )
+    organisation = django_filters.NumberFilter(
+        field_name="organisation", help_text="Réalisations de cette organisation (identifiant)."
+    )
+    par_la_mairie = django_filters.BooleanFilter(
+        field_name="organisation",
+        lookup_expr="isnull",
+        help_text="`true` : réalisations de la mairie ; `false` : réalisations des organisations.",
     )
 
     class Meta:
         model = Realisation
-        fields = ["statut", "secteur", "quartier", "date_debut", "date_fin", "publie", "commune"]
+        fields = ["statut", "secteur", "quartier", "date_debut", "date_fin", "publie", "commune", "organisation", "par_la_mairie"]
 
     def filtrer_publication(self, queryset, name, valeur):
-        if valeur is None or not est_personnel_mairie(getattr(self.request, "user", None)):
+        utilisateur = getattr(self.request, "user", None)
+        organisation = getattr(utilisateur, "role", None) == Utilisateur.Role.ORGANISATION
+        if valeur is None or not (est_personnel_mairie(utilisateur) or organisation):
             return queryset
         return queryset.filter(publie=valeur)

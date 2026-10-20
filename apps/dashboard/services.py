@@ -61,7 +61,9 @@ def suggestions(filtres):
 
 def realisations(filtres, mairie):
     queryset = _filtrer(Realisation.objects.all(), filtres, "quartiers").distinct()
-    return queryset if mairie else queryset.filter(publie=True)
+    # Publiées (mairie et organisations) ; la mairie compte aussi ses propres brouillons,
+    # jamais ceux des organisations.
+    return queryset.filter(Q(publie=True) | Q(organisation__isnull=True)) if mairie else queryset.filter(publie=True)
 
 
 def _jours(duree):

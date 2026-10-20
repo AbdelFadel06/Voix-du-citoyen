@@ -56,6 +56,8 @@ class CodeErreur(models.TextChoices):
     # --- Signalements ---
     TRANSITION_STATUT_INVALIDE = "TRANSITION_STATUT_INVALIDE"
     SIGNALEMENT_CLOTURE = "SIGNALEMENT_CLOTURE"
+    SIGNALEMENT_DEJA_PRIS_EN_CHARGE = "SIGNALEMENT_DEJA_PRIS_EN_CHARGE"
+    ORGANISATION_NON_EN_CHARGE = "ORGANISATION_NON_EN_CHARGE"
 
     # --- Suggestions ---
     SOUTIEN_PROPRE_SUGGESTION = "SOUTIEN_PROPRE_SUGGESTION"
@@ -140,6 +142,14 @@ INFOS_ERREURS = {
     ),
     CodeErreur.TRANSITION_STATUT_INVALIDE: (409, "Ce changement de statut n'est pas possible."),
     CodeErreur.SIGNALEMENT_CLOTURE: (409, "Ce signalement est clôturé : il ne peut plus être modifié."),
+    CodeErreur.SIGNALEMENT_DEJA_PRIS_EN_CHARGE: (
+        409,
+        "Ce signalement est déjà pris en charge par une autre organisation.",
+    ),
+    CodeErreur.ORGANISATION_NON_EN_CHARGE: (
+        403,
+        "Seule l'organisation en charge de ce signalement peut changer son statut.",
+    ),
     CodeErreur.SOUTIEN_PROPRE_SUGGESTION: (400, "Vous ne pouvez pas soutenir votre propre suggestion."),
 }
 

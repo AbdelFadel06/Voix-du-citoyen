@@ -9,6 +9,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 
+from apps.accounts.models import Utilisateur
 from apps.core.codes_erreur import CodeErreur
 from apps.core.communes import commune_de_l_auteur, controler_quartier
 from apps.core.exceptions import ErreurMetier
@@ -36,6 +37,9 @@ TRANSITIONS = {
     Statut.REJETE: set(),
     Statut.DOUBLON: set(),
 }
+# Statuts qu'une organisation en charge peut donner : rejeter un dossier ou le classer comme
+# doublon reste une décision de la mairie.
+STATUTS_ORGANISATION = {Statut.RECU, Statut.EN_COURS, Statut.RESOLU}
 
 
 def _coordonnee(valeur):
@@ -124,6 +128,7 @@ def creer_signalement(
         commentaire="Signalement envoyé à la mairie.",
         auteur=auteur,
     )
+    notifications.notifier_nouveau_signalement(signalement)
     return signalement, avertissements
 
 
@@ -139,6 +144,14 @@ def _verrouiller(signalement):
 @transaction.atomic
 def changer_statut(signalement, *, par, statut, commentaire="", doublon_de=None):
     signalement = _verrouiller(signalement)
+    if par.role == Utilisateur.Role.ORGANISATION:
+        if signalement.organisation_assignee_id is None or signalement.organisation_assignee_id != par.organisation_id:
+            raise ErreurMetier(CodeErreur.ORGANISATION_NON_EN_CHARGE)
+        if statut not in STATUTS_ORGANISATION:
+            raise ErreurMetier(
+                CodeErreur.PERMISSION_REFUSEE,
+                "Seule la mairie peut rejeter un signalement ou le classer comme doublon.",
+            )
     ancien = signalement.statut
     possibles = TRANSITIONS[ancien]
     if statut not in possibles:
@@ -211,6 +224,82 @@ def assigner(signalement, *, par, service=None, agent=None):
         commentaire=f"Dossier confié au service « {service.nom} ».",
         auteur=par,
     )
+    return signalement
+
+
+def _controler_perimetre(organisation, signalement):
+    """L'organisation doit être habilitée et intervenir dans la commune et le secteur du dossier."""
+    if not organisation.acces_autorise:
+        raise ErreurMetier(
+            CodeErreur.VALIDATION_ERREUR,
+            details={"organisation": ["Cette organisation est suspendue ou son habilitation a expiré."]},
+        )
+    couvert = (
+        organisation.communes.filter(pk=signalement.commune_id).exists()
+        and organisation.secteurs.filter(pk=signalement.secteur_id).exists()
+    )
+    if not couvert:
+        raise ErreurMetier(
+            CodeErreur.VALIDATION_ERREUR,
+            details={"organisation": ["Cette organisation n'intervient pas dans la commune ou le secteur de ce dossier."]},
+        )
+
+
+@transaction.atomic
+def prendre_en_charge(signalement, *, par):
+    """
+    Une organisation se confie un signalement de son périmètre qui n'est encore suivi par
+    aucune organisation. Sans effet si elle en est déjà chargée.
+    """
+    signalement = _verrouiller(signalement)
+    if signalement.organisation_assignee_id == par.organisation_id:
+        return signalement
+    if signalement.est_cloture:
+        raise ErreurMetier(CodeErreur.SIGNALEMENT_CLOTURE)
+    if signalement.organisation_assignee_id is not None:
+        raise ErreurMetier(CodeErreur.SIGNALEMENT_DEJA_PRIS_EN_CHARGE)
+    organisation = par.organisation
+    _controler_perimetre(organisation, signalement)
+    signalement.organisation_assignee = organisation
+    signalement.save(update_fields=["organisation_assignee", "maj_le"])
+    SuiviSignalement.objects.create(
+        signalement=signalement,
+        type_evenement=TypeEvenement.ASSIGNATION,
+        commentaire=f"Dossier pris en charge par l'organisation « {organisation.nom} ».",
+        auteur=par,
+    )
+    return signalement
+
+
+@transaction.atomic
+def affecter_organisation(signalement, *, par, organisation):
+    """
+    La mairie confie le signalement à une organisation (qui en remplace une éventuelle autre),
+    ou le lui retire (`organisation=None`).
+    """
+    signalement = _verrouiller(signalement)
+    if signalement.est_cloture:
+        raise ErreurMetier(CodeErreur.SIGNALEMENT_CLOTURE)
+    precedente = signalement.organisation_assignee
+    if organisation is None:
+        if precedente is None:
+            return signalement
+        commentaire = f"L'organisation « {precedente.nom} » n'est plus chargée de ce dossier."
+    else:
+        if precedente is not None and precedente.pk == organisation.pk:
+            return signalement
+        _controler_perimetre(organisation, signalement)
+        commentaire = f"Dossier confié à l'organisation « {organisation.nom} »."
+    signalement.organisation_assignee = organisation
+    signalement.save(update_fields=["organisation_assignee", "maj_le"])
+    SuiviSignalement.objects.create(
+        signalement=signalement,
+        type_evenement=TypeEvenement.ASSIGNATION,
+        commentaire=commentaire,
+        auteur=par,
+    )
+    if organisation is not None:
+        notifications.notifier_affectation_organisation(signalement)
     return signalement
 
 

@@ -1,11 +1,12 @@
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from apps.core.codes_erreur import CodeErreur
 from apps.core.communes import cloisonner
-from apps.core.permissions import EstAgentMairie, est_personnel_mairie
+from apps.accounts.models import Utilisateur
+from apps.core.permissions import EstMairieOuOrganisation, est_personnel_mairie
 from apps.core.reponses import reponse_succes
 from apps.core.schema import (
     EXEMPLE_PAGE_INEXISTANTE,
@@ -28,7 +29,14 @@ EXEMPLE_INTROUVABLE = exemple_erreur(
     CodeErreur.RESSOURCE_INTROUVABLE, nom="Réalisation inconnue ou non publiée"
 )
 EXEMPLE_RESERVE_MAIRIE = exemple_erreur(
-    CodeErreur.PERMISSION_REFUSEE, "Action réservée aux agents de la mairie.", nom="Réservé à la mairie"
+    CodeErreur.PERMISSION_REFUSEE,
+    "Accès réservé à la mairie et aux organisations habilitées.",
+    nom="Réservé à la mairie et aux organisations",
+)
+EXEMPLE_PAS_PROPRIETAIRE = exemple_erreur(
+    CodeErreur.PERMISSION_REFUSEE,
+    "Seul l'auteur de cette réalisation (la mairie ou l'organisation qui l'a publiée) peut la modifier.",
+    nom="Réalisation d'un autre auteur",
 )
 EXEMPLE_JETON_INVALIDE = exemple_erreur(
     CodeErreur.JETON_INVALIDE, description="Un jeton est envoyé mais il a expiré : le renouveler ou ne pas l'envoyer."
@@ -54,9 +62,15 @@ EXEMPLES_ECRITURE = [
     *EXEMPLES_AUTH_REQUISE,
 ]
 DESCRIPTION_PUBLIC = """
-**Public** : aucun compte nécessaire. Sans jeton (ou pour un citoyen, une organisation), seules
-les réalisations **publiées** sont visibles. Avec le jeton d'un **agent ou admin mairie**, les
-brouillons (`publie: false`) sont aussi renvoyés, avec les champs `publie` et `cree_par`.
+**Deux auteurs** : la **mairie** et les **organisations** (ONG, OSC) publient chacune leurs
+réalisations. `organisation` indique l'organisation auteur, `null` pour la mairie ; filtres
+`?par_la_mairie=true|false` et `?organisation=<id>`.
+
+**Public** : aucun compte nécessaire. Sans jeton (ou pour un citoyen), seules les réalisations
+**publiées** sont visibles. Chaque auteur voit en plus **ses propres brouillons**
+(`publie: false`) : un agent ou admin ceux de la mairie (de sa commune), une organisation les
+siens. `publie` et `cree_par` ne sont renvoyés qu'à qui gère la réalisation ; `peut_modifier`
+indique s'il peut la modifier.
 """
 
 
@@ -65,12 +79,14 @@ brouillons (`publie: false`) sont aussi renvoyés, avec les champs `publie` et `
         tags=[TAG_REALISATIONS],
         summary="Lister les réalisations",
         description=f"""
-Liste **paginée** des réalisations de la mairie, de la plus récente à la plus ancienne.
+Liste **paginée** des réalisations de la mairie et des organisations, de la plus récente à la
+plus ancienne.
 Chaque élément ne contient qu'**une photo de couverture** (miniature) et le nombre de médias ;
 le détail complet est donné par `GET /realisations/{{id}}/`.
 
-**Filtres** : `statut`, `secteur`, `quartier`, `date_debut`, `date_fin` (dates de création) et,
-pour la mairie uniquement, `publie=false` (brouillons).
+**Filtres** : `statut`, `secteur`, `quartier`, `date_debut`, `date_fin` (dates de création),
+`par_la_mairie`, `organisation` et, pour la mairie et les organisations, `publie=false` (leurs
+brouillons).
 **Recherche** (`recherche`) : référence, titre, description, prestataire.
 **Tri** (`tri`) : `cree_le`, `maj_le`, `taux_avancement`, `date_fin_prevue`.
 {DESCRIPTION_PUBLIC}""",
@@ -79,6 +95,7 @@ pour la mairie uniquement, `publie=false` (brouillons).
         examples=[
             exemple_element_liste("Réalisation publiée", exemples.LISTE),
             exemple_element_liste("Brouillon vu par la mairie", exemples.BROUILLON),
+            exemple_element_liste("Réalisation d'une organisation", exemples.LISTE_ORGANISATION),
             EXEMPLE_PAGE_INEXISTANTE,
             EXEMPLE_JETON_INVALIDE,
         ],
@@ -91,7 +108,7 @@ Détail complet : description, dates prévues et réelles, budget (FCFA), financ
 prestataire, position, **photos et vidéos par phase** (`AVANT`, `PENDANT`, `APRES`) et
 signalements / suggestions à l'origine des travaux.
 
-Un brouillon demandé sans être de la mairie donne `RESSOURCE_INTROUVABLE`.
+Le brouillon d'un autre auteur donne `RESSOURCE_INTROUVABLE`.
 {DESCRIPTION_PUBLIC}""",
         auth=[],
         responses={200: enveloppe(RealisationDetailSerializer), **erreurs(401, 404)},
@@ -118,9 +135,14 @@ du public : la publier plus tard avec `PATCH { "publie": true }`, ou directement
   connecté, chacune avec sa `phase` (10 photos et 2 vidéos au maximum).
 - `signalements` / `suggestions` : dossiers citoyens à l'origine des travaux.
 
+**Organisation** (ONG, OSC) : la réalisation est à son nom (`organisation`) et elle seule pourra
+la modifier. Elle doit rester dans son **périmètre** : quartiers d'une de ses communes
+d'intervention, `secteur` parmi ses secteurs, signalements de ses secteurs ; pas de
+`suggestions` (sinon `VALIDATION_ERREUR`).
+
 **Après la création** : référence `REA-AAAA-NNNNN`.
 
-**Connecté** : agents et admins mairie.
+**Connecté** : agents et admins mairie ; organisations habilitées.
 """,
         request=RealisationEcritureSerializer,
         responses={201: enveloppe(RealisationDetailSerializer), **erreurs(400, 401, 403, 409)},
@@ -150,7 +172,10 @@ des dates réelles, publication…).
 
 Mêmes contrôles qu'à la création, appliqués à l'état final.
 
-**Connecté** : agents et admins mairie.
+**Seul l'auteur** modifie une réalisation : la mairie les siennes, chaque organisation les siennes
+(`PERMISSION_REFUSEE` sinon, même si elle est visible).
+
+**Connecté** : agents et admins mairie ; organisations habilitées.
 """,
         request=RealisationEcritureSerializer,
         responses={200: enveloppe(RealisationDetailSerializer), **erreurs(400, 401, 403, 404, 409)},
@@ -160,6 +185,7 @@ Mêmes contrôles qu'à la création, appliqués à l'état final.
             exemple_succes("Réalisation publiée", exemples.DETAIL_MAIRIE, "Réalisation publiée."),
             exemple_succes("Réalisation mise à jour", exemples.DETAIL_MAIRIE, "Réalisation mise à jour."),
             EXEMPLE_INTROUVABLE,
+            EXEMPLE_PAS_PROPRIETAIRE,
             *EXEMPLES_ECRITURE,
         ],
     ),
@@ -179,7 +205,7 @@ class RealisationViewSet(
 
     def get_permissions(self):
         if self.action in ("create", "partial_update"):
-            return [IsAuthenticated(), EstAgentMairie()]
+            return [IsAuthenticated(), EstMairieOuOrganisation()]
         return [AllowAny()]
 
     def get_serializer_class(self):
@@ -189,11 +215,17 @@ class RealisationViewSet(
         medias = RealisationMedia.objects.select_related("media").order_by("ordre", "id")
         queryset = (
             cloisonner(Realisation.objects.all(), self.request.user)
-            .select_related("commune", "secteur")
+            .select_related("commune", "secteur", "organisation")
             .prefetch_related("quartiers__arrondissement", Prefetch("medias", queryset=medias))
             .distinct()
         )
-        if not est_personnel_mairie(self.request.user):
+        # Publiées pour tous ; chaque auteur voit en plus ses propres brouillons.
+        utilisateur = self.request.user
+        if est_personnel_mairie(utilisateur):
+            queryset = queryset.filter(Q(publie=True) | Q(organisation__isnull=True))
+        elif getattr(utilisateur, "role", None) == Utilisateur.Role.ORGANISATION:
+            queryset = queryset.filter(Q(publie=True) | Q(organisation=utilisateur.organisation_id))
+        else:
             queryset = queryset.filter(publie=True)
         if self.action != "list":
             queryset = queryset.select_related("cree_par").prefetch_related("signalements", "suggestions")

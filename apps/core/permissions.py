@@ -4,7 +4,7 @@ Permissions communes à toutes les apps.
 Un ADMIN_MAIRIE peut tout ce que peut un AGENT : EstAgentMairie les accepte tous les deux.
 """
 
-from rest_framework.permissions import SAFE_METHODS, BasePermission
+from rest_framework.permissions import BasePermission
 
 from apps.accounts.models import Utilisateur
 
@@ -70,17 +70,6 @@ class EstMairieOuOrganisation(BasePermission):
         return _a_le_role(request.user, Role.AGENT, Role.ADMIN_MAIRIE) or organisation_habilitee(
             request.user
         )
-
-
-class LectureSeuleOrganisation(BasePermission):
-    """Les organisations ne peuvent que consulter : toute écriture leur est refusée."""
-
-    message = "Les organisations ont un accès en lecture seule."
-
-    def has_permission(self, request, view):
-        if _a_le_role(request.user, Role.ORGANISATION):
-            return request.method in SAFE_METHODS
-        return True
 
 
 def est_personnel_mairie(utilisateur):

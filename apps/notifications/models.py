@@ -10,6 +10,8 @@ class Notification(ModeleHorodate):
         REPONSE_SIGNALEMENT = "REPONSE_SIGNALEMENT", "Réponse de la mairie à un signalement"
         REPONSE_SUGGESTION = "REPONSE_SUGGESTION", "Réponse de la mairie à une suggestion"
         NOUVELLE_REALISATION = "NOUVELLE_REALISATION", "Nouvelle réalisation publiée"
+        NOUVEAU_SIGNALEMENT = "NOUVEAU_SIGNALEMENT", "Nouveau signalement dans la zone d'intervention"
+        AFFECTATION_SIGNALEMENT = "AFFECTATION_SIGNALEMENT", "Signalement confié à l'organisation par la mairie"
 
     class Cible(models.TextChoices):
         SIGNALEMENT = "signalement", "Signalement"

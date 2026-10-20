@@ -150,11 +150,63 @@ def destinataires_realisation(realisation):
     ).distinct()
 
 
+def destinataires_nouveau_signalement(signalement):
+    """
+    Comptes actifs des organisations habilitées (non expirées) dont le périmètre couvre le
+    signalement : sa commune parmi leurs communes d'intervention ET son secteur parmi leurs
+    secteurs d'intervention.
+    """
+    from django.db.models import Q
+
+    from apps.accounts.models import Organisation
+
+    return Utilisateur.objects.filter(
+        Q(organisation__date_expiration__isnull=True) | Q(organisation__date_expiration__gte=timezone.localdate()),
+        role=Utilisateur.Role.ORGANISATION,
+        is_active=True,
+        organisation__statut_habilitation=Organisation.StatutHabilitation.HABILITEE,
+        organisation__communes=signalement.commune_id,
+        organisation__secteurs=signalement.secteur_id,
+    ).distinct()
+
+
+def notifier_nouveau_signalement(signalement):
+    """Prévient les organisations concernées (jamais d'information sur l'auteur)."""
+    notifier(
+        destinataires_nouveau_signalement(signalement),
+        type=Type.NOUVEAU_SIGNALEMENT,
+        titre=f"Nouveau signalement : {signalement.secteur.nom}",
+        message=_extrait(
+            f"{signalement.reference} à {signalement.quartier.nom} ({signalement.commune.nom}) : {signalement.titre}"
+        ),
+        cible_type=Cible.SIGNALEMENT,
+        cible_id=signalement.pk,
+    )
+
+
+def notifier_affectation_organisation(signalement):
+    """La mairie confie un signalement à une organisation : tous ses comptes actifs sont prévenus."""
+    notifier(
+        signalement.organisation_assignee.membres.filter(is_active=True),
+        type=Type.AFFECTATION_SIGNALEMENT,
+        titre="La mairie vous confie un signalement",
+        message=_extrait(
+            f"{signalement.reference} à {signalement.quartier.nom} ({signalement.commune.nom}) : {signalement.titre}"
+        ),
+        cible_type=Cible.SIGNALEMENT,
+        cible_id=signalement.pk,
+    )
+
+
 def notifier_nouvelle_realisation(realisation):
     notifier(
         destinataires_realisation(realisation),
         type=Type.NOUVELLE_REALISATION,
-        titre="Nouvelle réalisation de la mairie",
+        titre=(
+            f"Nouvelle réalisation : {realisation.organisation.nom}"
+            if realisation.organisation_id
+            else "Nouvelle réalisation de la mairie"
+        ),
         message=_extrait(realisation.titre),
         cible_type=Cible.REALISATION,
         cible_id=realisation.pk,

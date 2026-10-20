@@ -81,6 +81,16 @@ class Signalement(ModeleHorodate):
         related_name="signalements_assignes",
         verbose_name="agent assigné",
     )
+    # Une seule organisation à la fois : elle se le confie elle-même (« prendre en charge »)
+    # ou la mairie le lui confie ; elle peut alors faire avancer le statut.
+    organisation_assignee = models.ForeignKey(
+        "accounts.Organisation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="signalements_pris_en_charge",
+        verbose_name="organisation en charge",
+    )
     doublon_de = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,

@@ -20,10 +20,20 @@ LISTE = {
     "date_fin_prevue": "2026-12-15",
     "couverture": {"phase": "AVANT", "media": MINIATURE},
     "nb_medias": 3,
+    "organisation": None,
+    "peut_modifier": False,
     "cree_le": "2026-08-20T11:00:00+01:00",
     "maj_le": "2026-10-05T17:30:00+01:00",
 }
-LISTE_MAIRIE = {**LISTE, "publie": True}
+ORGANISATION = {"id": 2, "nom": "ONG Eau Pour Tous", "sigle": "EPT"}
+LISTE_ORGANISATION = {
+    **LISTE,
+    "id": 9,
+    "reference": "REA-2026-00009",
+    "titre": "Forage d'eau potable à l'école de Gah",
+    "organisation": ORGANISATION,
+}
+LISTE_MAIRIE = {**LISTE, "publie": True, "peut_modifier": True}
 BROUILLON = {
     **LISTE,
     "id": 5,
@@ -33,6 +43,7 @@ BROUILLON = {
     "taux_avancement": 0,
     "couverture": None,
     "nb_medias": 0,
+    "peut_modifier": True,
     "publie": False,
 }
 
@@ -54,7 +65,7 @@ DETAIL = {
     "signalements": [{"id": 128, "reference": "SIG-2026-00128", "titre": "Gros nid-de-poule devant l'école", "statut": "RESOLU"}],
     "suggestions": [],
 }
-DETAIL_MAIRIE = {**DETAIL, "publie": True, "cree_par": {"id": 7, "nom": "Ahouansou", "prenoms": "Rodrigue"}}
+DETAIL_MAIRIE = {**DETAIL, "publie": True, "peut_modifier": True, "cree_par": {"id": 7, "nom": "Ahouansou", "prenoms": "Rodrigue"}}
 
 REQUETE_CREATION = {
     "titre": "Pavage de la rue de l'EPP Togoudo",

@@ -3,13 +3,20 @@ Logique métier des réalisations (CLAUDE.md § 5 et § 6).
 
 À la publication (création publiée ou passage brouillon → publiée), les citoyens concernés
 reçoivent une notification `NOUVELLE_REALISATION`.
+
+La mairie et les organisations (ONG, OSC) publient chacune leurs réalisations et ne gèrent que
+les leurs. Une organisation travaille dans son périmètre : quartiers de ses communes
+d'intervention, secteur parmi ses secteurs, signalements liés de ce périmètre, jamais de
+suggestions (elle n'y a pas accès).
 """
 
 from decimal import Decimal
 
 from django.db import transaction
 
+from apps.accounts.models import Utilisateur
 from apps.core.codes_erreur import CodeErreur
+from apps.core.permissions import est_personnel_mairie
 from apps.core.exceptions import ErreurMetier
 from apps.core.references import prochaine_reference
 from apps.medias import services as medias
@@ -56,6 +63,31 @@ def _controler_relations(commune, relations):
         raise ErreurMetier(CodeErreur.VALIDATION_ERREUR, details=erreurs)
 
 
+def peut_gerer(utilisateur, realisation):
+    """La mairie gère les réalisations de la mairie (de sa commune), une organisation les siennes."""
+    if utilisateur is None or not utilisateur.is_authenticated:
+        return False
+    if realisation.organisation_id is not None:
+        return utilisateur.role == Utilisateur.Role.ORGANISATION and utilisateur.organisation_id == realisation.organisation_id
+    return est_personnel_mairie(utilisateur) and utilisateur.commune_id in (None, realisation.commune_id)
+
+
+def _controler_perimetre_organisation(organisation, commune, secteur, relations):
+    """Une organisation ne publie que dans ses communes et secteurs d'intervention."""
+    erreurs = {}
+    if not organisation.communes.filter(pk=commune.pk).exists():
+        erreurs["quartiers"] = [f"Votre organisation n'intervient pas dans la commune de {commune.nom}."]
+    secteurs = set(organisation.secteurs.values_list("pk", flat=True))
+    if secteur.pk not in secteurs:
+        erreurs["secteur"] = ["Votre organisation n'intervient pas dans ce secteur."]
+    if any(dossier.secteur_id not in secteurs for dossier in relations.get("signalements", [])):
+        erreurs["signalements"] = ["Les signalements liés doivent être dans vos secteurs d'intervention."]
+    if relations.get("suggestions"):
+        erreurs["suggestions"] = ["Une organisation ne peut pas lier de suggestions."]
+    if erreurs:
+        raise ErreurMetier(CodeErreur.VALIDATION_ERREUR, details=erreurs)
+
+
 def _enregistrer_medias(realisation, elements, par):
     """
     Remplace la liste des photos et vidéos par `elements` ([{media, phase, legende, ordre}]).
@@ -89,11 +121,15 @@ def _enregistrer_medias(realisation, elements, par):
 @transaction.atomic
 def creer_realisation(*, par, medias=(), **champs):
     relations = {nom: champs.pop(nom, []) for nom in RELATIONS}
-    # Commune de l'agent ; pour un admin de la plateforme, celle des quartiers concernés.
-    commune = par.commune or relations["quartiers"][0].arrondissement.commune
+    organisation = par.organisation if par.role == Utilisateur.Role.ORGANISATION else None
+    # Commune de l'agent ; pour un admin de la plateforme ou une organisation, celle des
+    # quartiers concernés.
+    commune = (None if organisation else par.commune) or relations["quartiers"][0].arrondissement.commune
     _controler_relations(commune, relations)
+    if organisation is not None:
+        _controler_perimetre_organisation(organisation, commune, champs["secteur"], relations)
     champs["latitude"], champs["longitude"] = _coordonnee(champs.get("latitude")), _coordonnee(champs.get("longitude"))
-    realisation = Realisation(cree_par=par, commune=commune, **champs)
+    realisation = Realisation(cree_par=par, commune=commune, organisation=organisation, **champs)
     _controler(realisation)
     realisation.reference = prochaine_reference(Realisation, PREFIXE_REFERENCE)
     realisation.save()
@@ -109,10 +145,19 @@ def creer_realisation(*, par, medias=(), **champs):
 def modifier_realisation(realisation, *, par, **changements):
     """Modification partielle : seuls les champs fournis changent (`medias` remplace la liste)."""
     realisation = Realisation.objects.select_for_update().get(pk=realisation.pk)
+    if not peut_gerer(par, realisation):
+        raise ErreurMetier(
+            CodeErreur.PERMISSION_REFUSEE,
+            "Seul l'auteur de cette réalisation (la mairie ou l'organisation qui l'a publiée) peut la modifier.",
+        )
     etait_publiee = realisation.publie
     elements = changements.pop("medias", None)
     relations = {nom: changements.pop(nom) for nom in RELATIONS if nom in changements}
     _controler_relations(realisation.commune, relations)
+    if realisation.organisation is not None:
+        _controler_perimetre_organisation(
+            realisation.organisation, realisation.commune, changements.get("secteur", realisation.secteur), relations
+        )
     for coordonnee in ("latitude", "longitude"):
         if coordonnee in changements:
             changements[coordonnee] = _coordonnee(changements[coordonnee])

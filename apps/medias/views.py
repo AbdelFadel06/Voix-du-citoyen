@@ -6,7 +6,6 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.core.codes_erreur import CodeErreur
-from apps.core.permissions import LectureSeuleOrganisation
 from apps.core.reponses import reponse_succes
 from apps.core.schema import (
     EXEMPLES_AUTH_REQUISE,
@@ -63,7 +62,7 @@ AUDIO = {
 
 
 class TeleversementView(APIView):
-    permission_classes = [IsAuthenticated, LectureSeuleOrganisation]
+    permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "televersement"
@@ -99,7 +98,7 @@ Un média ne peut servir qu'**une seule fois**, et uniquement à son auteur.
 
 **Limitation** : 60 envois par heure et par utilisateur.
 
-**Connecté** : citoyens, agents et admins mairie (les organisations sont en lecture seule).
+**Connecté** : citoyens, agents et admins mairie, organisations habilitées (photos et vidéos de leurs réalisations).
 """,
         request={"multipart/form-data": TeleversementSerializer},
         responses={201: enveloppe(MediaSerializer), **erreurs(400, 401, 403, 429)},
@@ -133,11 +132,7 @@ Un média ne peut servir qu'**une seule fois**, et uniquement à son auteur.
                 },
                 nom="Vidéo sans durée ni miniature",
             ),
-            exemple_erreur(
-                CodeErreur.PERMISSION_REFUSEE,
-                "Les organisations ont un accès en lecture seule.",
-                nom="Compte organisation",
-            ),
+            exemple_erreur(CodeErreur.ORGANISATION_NON_HABILITEE, nom="Organisation suspendue ou expirée"),
             exemple_trop_de_requetes(1200),
             *EXEMPLES_AUTH_REQUISE,
         ],

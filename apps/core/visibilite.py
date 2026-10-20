@@ -99,6 +99,9 @@ class SuiviSerializer(ChampsMairieMixin, serializers.ModelSerializer):
     champs_mairie = ("auteur_nom", "visible_citoyen")
 
     par_la_mairie = serializers.SerializerMethodField(help_text="Vrai si l'événement vient de la mairie.")
+    organisation = serializers.SerializerMethodField(
+        help_text="Nom de l'organisation (ONG, OSC) à l'origine de l'événement, ou `null`."
+    )
     auteur_nom = serializers.SerializerMethodField(
         help_text="Nom de l'agent à l'origine de l'événement (agents et admins uniquement) ; `null` "
         "pour un événement du citoyen (ex. le dépôt), dont l'identité n'est jamais montrée."
@@ -112,6 +115,7 @@ class SuiviSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "nouveau_statut",
             "commentaire",
             "par_la_mairie",
+            "organisation",
             "auteur_nom",
             "visible_citoyen",
             "cree_le",
@@ -129,6 +133,11 @@ class SuiviSerializer(ChampsMairieMixin, serializers.ModelSerializer):
 
     def get_par_la_mairie(self, suivi) -> bool:
         return suivi.auteur.role in ROLES_MAIRIE
+
+    def get_organisation(self, suivi) -> str | None:
+        if suivi.auteur.role != Utilisateur.Role.ORGANISATION or suivi.auteur.organisation is None:
+            return None
+        return suivi.auteur.organisation.nom
 
     def get_auteur_nom(self, suivi) -> str | None:
         if suivi.auteur.role not in ROLES_MAIRIE:

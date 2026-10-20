@@ -2,6 +2,7 @@ from django.urls import path
 
 from . import views
 from . import views_administration as admin_views
+from .views_organisations import OrganisationViewSet
 
 app_name = "accounts"
 
@@ -27,4 +28,6 @@ urlpatterns += [
     path("services/<int:pk>/", admin_views.ServiceMunicipalViewSet.as_view(DETAIL), name="service-detail"),
     path("agents/", admin_views.AgentViewSet.as_view(LECTURE_CREATION), name="agents"),
     path("agents/<int:pk>/", admin_views.AgentViewSet.as_view(DETAIL), name="agent-detail"),
+    path("organisations/", OrganisationViewSet.as_view({"get": "list"}), name="organisations"),
+    path("organisations/<int:pk>/", OrganisationViewSet.as_view({"get": "retrieve"}), name="organisation-detail"),
 ]

@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.accounts.models import ServiceMunicipal, Utilisateur
+from apps.accounts.models import Organisation, ServiceMunicipal, Utilisateur
 from apps.accounts.serializers import AgentResumeSerializer, ServiceResumeSerializer
 from apps.core.visibilite import (
     AuteurSerializer,
@@ -30,6 +30,17 @@ CHOIX_STATUTS_CIBLES = [choix for choix in Statut.choices if choix[0] != Statut.
 # ---------------------------------------------------------------------------
 
 
+class OrganisationEnChargeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organisation
+        fields = ["id", "nom", "sigle"]
+        extra_kwargs = {
+            "id": {"help_text": "Identifiant de l'organisation."},
+            "nom": {"help_text": "Nom de l'organisation."},
+            "sigle": {"help_text": "Sigle, ou chaîne vide."},
+        }
+
+
 class SignalementListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
     champs_mairie = ("service_assigne", "agent_assigne")
 
@@ -45,6 +56,11 @@ class SignalementListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
     )
     agent_assigne = AgentResumeSerializer(
         allow_null=True, help_text="Agent chargé du dossier (agents et admins uniquement)."
+    )
+    organisation_assignee = OrganisationEnChargeSerializer(
+        allow_null=True,
+        help_text="Organisation (ONG, OSC) en charge du dossier, visible par tous ; `null` si aucune. "
+        "Une organisation de la zone peut le prendre en charge tant qu'il est `null` et non clos.",
     )
 
     class Meta:
@@ -67,6 +83,7 @@ class SignalementListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "est_auteur",
             "service_assigne",
             "agent_assigne",
+            "organisation_assignee",
             "cree_le",
             "maj_le",
         ]
@@ -277,6 +294,16 @@ class AssignationSerializer(serializers.Serializer):
         if not attrs.get("service") and not attrs.get("agent"):
             raise serializers.ValidationError({"service": ["Indiquez un service ou un agent."]})
         return attrs
+
+
+class AffectationOrganisationSerializer(serializers.Serializer):
+    organisation = serializers.PrimaryKeyRelatedField(
+        queryset=Organisation.objects.all(),
+        allow_null=True,
+        error_messages={"does_not_exist": "Cette organisation n'existe pas."},
+        help_text="Organisation à qui confier le dossier, ou `null` pour le lui retirer. Elle doit être "
+        "habilitée et intervenir dans la commune et le secteur du dossier.",
+    )
 
 
 class ReponseSignalementSerializer(serializers.Serializer):

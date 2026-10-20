@@ -212,11 +212,16 @@ class TestAcces:
     def test_non_authentifie(self, api_client):
         erreur(envoyer(api_client, "IMAGE", fichiers.jpeg_avec_exif()), CodeErreur.NON_AUTHENTIFIE, 401)
 
-    def test_organisation_en_lecture_seule(self, creer_utilisateur, client_connecte):
-        client = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION))
-        erreur(envoyer(client, "IMAGE", fichiers.jpeg_avec_exif()), CodeErreur.PERMISSION_REFUSEE, 403)
+    def test_organisation_suspendue(self, creer_utilisateur, client_connecte):
+        compte = creer_utilisateur(role=Utilisateur.Role.ORGANISATION)
+        compte.organisation.statut_habilitation = "SUSPENDUE"
+        compte.organisation.motif_suspension = "Contrôle"
+        compte.organisation.save()
+        reponse = envoyer(client_connecte(compte), "IMAGE", fichiers.jpeg_avec_exif())
+        erreur(reponse, CodeErreur.ORGANISATION_NON_HABILITEE, 403)
 
-    @pytest.mark.parametrize("role", [Utilisateur.Role.AGENT, Utilisateur.Role.ADMIN_MAIRIE])
+    # Les organisations envoient les photos et vidéos de leurs réalisations.
+    @pytest.mark.parametrize("role", [Utilisateur.Role.AGENT, Utilisateur.Role.ADMIN_MAIRIE, Utilisateur.Role.ORGANISATION])
     def test_agents_et_admins_peuvent_envoyer(self, creer_utilisateur, client_connecte, role):
         donnees(envoyer(client_connecte(creer_utilisateur(role=role)), "IMAGE", fichiers.jpeg_avec_exif()))
 

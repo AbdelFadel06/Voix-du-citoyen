@@ -212,9 +212,9 @@ class TestCreation:
         reponse = mairie.post(URL, corps(secteur, quartier, medias=[{"media": media, "phase": "AVANT"}, {"media": media, "phase": "APRES"}]), format="json")
         assert "medias" in erreur(reponse, CodeErreur.VALIDATION_ERREUR, 400)["details"]
 
-    @pytest.mark.parametrize("role", [Utilisateur.Role.CITOYEN, Utilisateur.Role.ORGANISATION])
-    def test_reserve_a_la_mairie(self, creer_utilisateur, client_connecte, secteur, quartier, role):
-        reponse = client_connecte(creer_utilisateur(role=role)).post(URL, corps(secteur, quartier), format="json")
+    def test_interdit_aux_citoyens(self, creer_utilisateur, client_connecte, secteur, quartier):
+        # Les organisations publient aussi leurs réalisations : voir test_realisations_organisations.py.
+        reponse = client_connecte(creer_utilisateur()).post(URL, corps(secteur, quartier), format="json")
         erreur(reponse, CodeErreur.PERMISSION_REFUSEE, 403)
 
     def test_non_authentifie(self, api_client, secteur, quartier):

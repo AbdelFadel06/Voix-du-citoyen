@@ -61,6 +61,7 @@ LISTE_CITOYEN = {
     "a_description_audio": True,
     "auteur": AUTEUR_PUBLIC,
     "est_auteur": False,
+    "organisation_assignee": None,
     "cree_le": "2026-10-06T16:21:40+01:00",
     "maj_le": "2026-10-07T09:02:13+01:00",
 }
@@ -80,6 +81,7 @@ HISTORIQUE_CITOYEN = [
         "nouveau_statut": "SOUMIS",
         "commentaire": "Signalement envoyé à la mairie.",
         "par_la_mairie": False,
+        "organisation": None,
         "cree_le": "2026-10-06T16:21:40+01:00",
     },
     {
@@ -89,6 +91,7 @@ HISTORIQUE_CITOYEN = [
         "nouveau_statut": "",
         "commentaire": "Dossier confié au service « Voirie et assainissement ».",
         "par_la_mairie": True,
+        "organisation": None,
         "cree_le": "2026-10-07T08:45:02+01:00",
     },
     {
@@ -98,6 +101,7 @@ HISTORIQUE_CITOYEN = [
         "nouveau_statut": "EN_COURS",
         "commentaire": "Une équipe interviendra cette semaine.",
         "par_la_mairie": True,
+        "organisation": None,
         "cree_le": "2026-10-07T09:02:13+01:00",
     },
 ]
@@ -113,6 +117,7 @@ HISTORIQUE_MAIRIE = [
         "nouveau_statut": "",
         "commentaire": "Prévoir 2 m³ de latérite, camion disponible jeudi.",
         "par_la_mairie": True,
+        "organisation": None,
         "auteur_nom": "Rodrigue Ahouansou",
         "visible_citoyen": False,
         "cree_le": "2026-10-07T09:05:30+01:00",
@@ -170,4 +175,38 @@ REQUETE_VOCALE = {
     "mode_localisation": "MANUEL",
     "quartier": 12,
     "repere": "Derrière le marché de Godomey",
+}
+
+
+# Organisation en charge (prise en charge par l'organisation, ou confiée par la mairie).
+ORGANISATION_EN_CHARGE = {"id": 2, "nom": "ONG Eau Pour Tous", "sigle": "EPT"}
+EVENEMENT_PRISE_EN_CHARGE = {
+    "id": 506,
+    "type_evenement": "ASSIGNATION",
+    "ancien_statut": "",
+    "nouveau_statut": "",
+    "commentaire": "Dossier pris en charge par l'organisation « ONG Eau Pour Tous ».",
+    "par_la_mairie": False,
+    "organisation": "ONG Eau Pour Tous",
+    "cree_le": "2026-10-08T10:15:00+01:00",
+}
+DETAIL_ORGANISATION = {
+    **DETAIL_CITOYEN,
+    "organisation_assignee": ORGANISATION_EN_CHARGE,
+    "historique": [*HISTORIQUE_CITOYEN, EVENEMENT_PRISE_EN_CHARGE],
+}
+DETAIL_MAIRIE_ORGANISATION = {
+    **DETAIL_MAIRIE,
+    "organisation_assignee": ORGANISATION_EN_CHARGE,
+    "historique": [
+        *HISTORIQUE_MAIRIE,
+        {
+            **EVENEMENT_PRISE_EN_CHARGE,
+            "commentaire": "Dossier confié à l'organisation « ONG Eau Pour Tous ».",
+            "par_la_mairie": True,
+            "organisation": None,
+            "auteur_nom": "Rodrigue Ahouansou",
+            "visible_citoyen": True,
+        },
+    ],
 }

@@ -64,6 +64,16 @@ class Realisation(ModeleHorodate):
         related_name="realisations_creees",
         verbose_name="créée par",
     )
+    # Vide : réalisation de la mairie. Renseignée : réalisation d'une organisation (ONG, OSC),
+    # gérée uniquement par elle.
+    organisation = models.ForeignKey(
+        "accounts.Organisation",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="realisations",
+        verbose_name="organisation",
+    )
 
     class Meta:
         verbose_name = "réalisation"

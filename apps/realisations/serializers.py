@@ -2,17 +2,18 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.serializers import AgentResumeSerializer
-from apps.core.visibilite import ChampsMairieMixin
+from apps.core.visibilite import utilisateur_connecte
 from apps.medias.serializers import MediaResumeSerializer, MediaSerializer
 from apps.referentiel.models import Secteur
 from apps.referentiel.serializers import SecteurResumeSerializer
 from apps.signalements.models import Signalement
-from apps.signalements.serializers import SignalementResumeSerializer
+from apps.signalements.serializers import OrganisationEnChargeSerializer, SignalementResumeSerializer
 from apps.suggestions.models import Suggestion
 from apps.territoire.models import Quartier
 from apps.territoire.serializers import CommuneResumeSerializer, QuartierResumeSerializer
 
 from .models import Realisation, RealisationMedia
+from .services import peut_gerer
 
 MAX_BUDGET = 10**14 - 1
 
@@ -53,8 +54,21 @@ class CouvertureSerializer(serializers.Serializer):
 # ---------------------------------------------------------------------------
 
 
-class RealisationListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
-    champs_mairie = ("publie",)
+class ChampsProprietaireMixin:
+    """Retire `champs_proprietaire` sauf pour qui gère la réalisation (la mairie ou l'organisation auteur)."""
+
+    champs_proprietaire = ()
+
+    def to_representation(self, instance):
+        donnees = super().to_representation(instance)
+        if not peut_gerer(utilisateur_connecte(self), instance):
+            for champ in self.champs_proprietaire:
+                donnees.pop(champ, None)
+        return donnees
+
+
+class RealisationListSerializer(ChampsProprietaireMixin, serializers.ModelSerializer):
+    champs_proprietaire = ("publie",)
 
     commune = CommuneResumeSerializer(help_text="Commune de la réalisation.")
     secteur = SecteurResumeSerializer(help_text="Secteur de la réalisation.")
@@ -63,6 +77,14 @@ class RealisationListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
         help_text="Première photo ou vidéo (miniature), ou `null` s'il n'y en a pas."
     )
     nb_medias = serializers.SerializerMethodField(help_text="Nombre de photos et vidéos.")
+    organisation = OrganisationEnChargeSerializer(
+        allow_null=True,
+        help_text="Organisation (ONG, OSC) auteur de la réalisation ; `null` : réalisation de la mairie.",
+    )
+    peut_modifier = serializers.SerializerMethodField(
+        help_text="Vrai si l'utilisateur connecté peut la modifier : la mairie pour les siennes, "
+        "l'organisation pour les siennes."
+    )
 
     class Meta:
         model = Realisation
@@ -79,6 +101,8 @@ class RealisationListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "date_fin_prevue",
             "couverture",
             "nb_medias",
+            "organisation",
+            "peut_modifier",
             "publie",
             "cree_le",
             "maj_le",
@@ -92,7 +116,9 @@ class RealisationListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
             "taux_avancement": {"help_text": "Avancement en pourcentage (0 à 100)."},
             "date_debut_prevue": {"help_text": "Début prévu, ou `null`."},
             "date_fin_prevue": {"help_text": "Fin prévue, ou `null`."},
-            "publie": {"help_text": "Vrai si publiée ; faux pour un brouillon (agents et admins uniquement)."},
+            "publie": {
+                "help_text": "Vrai si publiée ; faux pour un brouillon. Uniquement pour qui gère la réalisation."
+            },
             "cree_le": {"help_text": "Date de création."},
             "maj_le": {"help_text": "Date de la dernière mise à jour."},
         }
@@ -110,15 +136,21 @@ class RealisationListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
     def get_nb_medias(self, realisation) -> int:
         return len(realisation.medias.all())
 
+    def get_peut_modifier(self, realisation) -> bool:
+        return peut_gerer(utilisateur_connecte(self), realisation)
+
 
 class RealisationDetailSerializer(RealisationListSerializer):
-    champs_mairie = ("publie", "cree_par")
+    champs_proprietaire = ("publie", "cree_par")
 
     medias = RealisationMediaSerializer(many=True, help_text="Photos et vidéos, dans l'ordre d'affichage.")
     signalements = SignalementResumeSerializer(many=True, help_text="Signalements à l'origine des travaux.")
     suggestions = SuggestionResumeSerializer(many=True, help_text="Suggestions à l'origine des travaux.")
     budget = serializers.IntegerField(allow_null=True, help_text="Budget en FCFA, ou `null`.")
-    cree_par = AgentResumeSerializer(help_text="Agent qui a créé la fiche (agents et admins uniquement).")
+    cree_par = AgentResumeSerializer(
+        help_text="Personne qui a créé la fiche (agent de la mairie ou membre de l'organisation). "
+        "Uniquement pour qui gère la réalisation."
+    )
 
     class Meta(RealisationListSerializer.Meta):
         fields = [
@@ -225,7 +257,8 @@ class RealisationEcritureSerializer(serializers.Serializer):
         many=True,
         required=False,
         error_messages={"does_not_exist": "Cette suggestion n'existe pas."},
-        help_text="Identifiants des suggestions mises en œuvre par ces travaux.",
+        help_text="Identifiants des suggestions mises en œuvre par ces travaux (mairie uniquement : "
+        "une organisation ne peut pas en lier).",
     )
     medias = RealisationMediaEntreeSerializer(
         many=True,

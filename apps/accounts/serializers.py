@@ -1,5 +1,6 @@
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from drf_spectacular.utils import extend_schema_field
 from phonenumber_field.serializerfields import PhoneNumberField
 from rest_framework import serializers
 
@@ -492,3 +493,124 @@ class AgentModificationSerializer(_AgentEcritureSerializer):
         for champ in self.fields.values():
             champ.required = False
         self.fields["mot_de_passe"].help_text = "Nouveau mot de passe (facultatif). " + AIDE_MOT_DE_PASSE
+
+
+# ---------------------------------------------------------------------------
+# Organisations et leurs statistiques (lecture par la mairie)
+# ---------------------------------------------------------------------------
+
+
+class StatistiquesOrganisationSerializer(serializers.Serializer):
+    """Signalements du périmètre d'une organisation et leur traitement par la mairie."""
+
+    signalements = serializers.IntegerField(help_text="Signalements de son périmètre (communes × secteurs).")
+    en_attente = serializers.IntegerField(help_text="Pas encore pris en compte par la mairie (statut `SOUMIS`).")
+    en_cours = serializers.IntegerField(help_text="Suivis par la mairie : reçus ou en cours de traitement.")
+    ouverts = serializers.IntegerField(help_text="Non clos : en attente + en cours.")
+    resolus = serializers.IntegerField(help_text="Résolus.")
+    rejetes = serializers.IntegerField(help_text="Rejetés par la mairie.")
+    taux_resolution = serializers.FloatField(
+        allow_null=True, help_text="Part des signalements résolus, en % (`null` sans signalement)."
+    )
+    delai_moyen_resolution_jours = serializers.FloatField(
+        allow_null=True, help_text="Délai moyen entre l'envoi et la résolution, en jours (`null` sans résolution)."
+    )
+    pris_en_charge = serializers.IntegerField(
+        required=False,
+        help_text="Dossiers dont l'organisation est en charge (pris elle-même ou confiés par la mairie). "
+        "Uniquement dans les totaux, pas dans les répartitions.",
+    )
+    resolus_pris_en_charge = serializers.IntegerField(
+        required=False, help_text="Parmi eux, ceux qui sont résolus. Uniquement dans les totaux."
+    )
+    realisations_publiees = serializers.IntegerField(
+        required=False, help_text="Réalisations publiées par l'organisation. Uniquement dans les totaux."
+    )
+
+
+class StatistiquesParCommuneSerializer(StatistiquesOrganisationSerializer):
+    commune = CommuneResumeSerializer(help_text="Commune d'intervention.")
+
+
+class StatistiquesParSecteurSerializer(StatistiquesOrganisationSerializer):
+    secteur = SecteurInterventionSerializer(help_text="Secteur d'intervention.")
+
+
+class OrganisationListeSerializer(serializers.ModelSerializer):
+    communes = CommuneResumeSerializer(many=True, read_only=True, help_text="Communes d'intervention.")
+    secteurs = SecteurInterventionSerializer(many=True, read_only=True, help_text="Secteurs d'intervention.")
+    acces_actif = serializers.BooleanField(
+        source="acces_autorise",
+        read_only=True,
+        help_text="Vrai si ses comptes peuvent se connecter (habilitée et non expirée).",
+    )
+    nb_comptes = serializers.IntegerField(read_only=True, help_text="Comptes utilisateurs actifs de l'organisation.")
+    statistiques = serializers.SerializerMethodField(
+        help_text="Signalements de son périmètre sur la période demandée (limités à votre commune pour la "
+        "mairie d'une commune)."
+    )
+
+    class Meta:
+        model = Organisation
+        fields = [
+            "id",
+            "nom",
+            "sigle",
+            "type",
+            "statut_habilitation",
+            "date_expiration",
+            "acces_actif",
+            "communes",
+            "secteurs",
+            "nb_comptes",
+            "statistiques",
+        ]
+        read_only_fields = fields
+        extra_kwargs = {
+            "id": {"help_text": "Identifiant de l'organisation."},
+            "nom": {"help_text": "Nom complet de l'organisation."},
+            "sigle": {"help_text": "Sigle, ou chaîne vide."},
+            "type": {"help_text": "`ONG`, `OSC` ou `AUTRE`."},
+            "statut_habilitation": {"help_text": "`HABILITEE` ou `SUSPENDUE`."},
+            "date_expiration": {"help_text": "Fin de l'habilitation, ou `null` (sans limite)."},
+        }
+
+    @extend_schema_field(StatistiquesOrganisationSerializer)
+    def get_statistiques(self, organisation):
+        return self.context["statistiques"][organisation.pk]["globales"]
+
+
+class OrganisationDetailSerializer(OrganisationListeSerializer):
+    statistiques_par_commune = serializers.SerializerMethodField(help_text="Mêmes chiffres, commune par commune.")
+    statistiques_par_secteur = serializers.SerializerMethodField(help_text="Mêmes chiffres, secteur par secteur.")
+
+    class Meta(OrganisationListeSerializer.Meta):
+        fields = [
+            *OrganisationListeSerializer.Meta.fields,
+            "numero_enregistrement",
+            "email",
+            "telephone",
+            "adresse",
+            "date_habilitation",
+            "motif_suspension",
+            "statistiques_par_commune",
+            "statistiques_par_secteur",
+        ]
+        read_only_fields = fields
+        extra_kwargs = {
+            **OrganisationListeSerializer.Meta.extra_kwargs,
+            "numero_enregistrement": {"help_text": "Numéro d'enregistrement officiel."},
+            "email": {"help_text": "E-mail de contact de l'organisation."},
+            "telephone": {"help_text": "Téléphone de contact de l'organisation."},
+            "adresse": {"help_text": "Adresse de l'organisation."},
+            "date_habilitation": {"help_text": "Date de l'habilitation par la mairie."},
+            "motif_suspension": {"help_text": "Motif de la suspension, ou chaîne vide."},
+        }
+
+    @extend_schema_field(StatistiquesParCommuneSerializer(many=True))
+    def get_statistiques_par_commune(self, organisation):
+        return self.context["statistiques"][organisation.pk]["par_commune"]
+
+    @extend_schema_field(StatistiquesParSecteurSerializer(many=True))
+    def get_statistiques_par_secteur(self, organisation):
+        return self.context["statistiques"][organisation.pk]["par_secteur"]

@@ -12,7 +12,6 @@ from apps.core.permissions import (
     EstCitoyen,
     EstMairieOuOrganisation,
     EstOrganisationHabilitee,
-    LectureSeuleOrganisation,
 )
 
 pytestmark = pytest.mark.django_db
@@ -69,15 +68,3 @@ def test_organisation_expirant_aujourd_hui_acceptee(creer_utilisateur, permissio
     compte = creer_utilisateur(role=Role.ORGANISATION)
     compte.organisation.date_expiration = timezone.localdate()
     assert autorise(permission, compte)
-
-
-@pytest.mark.parametrize("methode", ["post", "put", "patch", "delete"])
-def test_organisation_en_lecture_seule(creer_utilisateur, methode):
-    compte = creer_utilisateur(role=Role.ORGANISATION)
-    assert autorise(LectureSeuleOrganisation, compte, "get")
-    assert not autorise(LectureSeuleOrganisation, compte, methode)
-
-
-@pytest.mark.parametrize("role", [Role.CITOYEN, Role.AGENT, Role.ADMIN_MAIRIE])
-def test_lecture_seule_ne_concerne_que_les_organisations(creer_utilisateur, role):
-    assert autorise(LectureSeuleOrganisation, creer_utilisateur(role=role), "post")

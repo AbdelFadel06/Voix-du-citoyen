@@ -102,10 +102,17 @@ class TestChangementDeStatut:
         reponse = poster(mairie, signalement, "changer-statut", {"statut": "DOUBLON", "doublon_de": intermediaire.pk})
         erreur(reponse, CodeErreur.VALIDATION_ERREUR, 400)
 
-    @pytest.mark.parametrize("role", [Utilisateur.Role.CITOYEN, Utilisateur.Role.ORGANISATION])
-    def test_reserve_a_la_mairie(self, signalement, creer_utilisateur, client_connecte, role):
+    @pytest.mark.parametrize(
+        "role, code",
+        [
+            (Utilisateur.Role.CITOYEN, CodeErreur.PERMISSION_REFUSEE),
+            # Une organisation ne peut agir que sur un dossier dont elle est en charge.
+            (Utilisateur.Role.ORGANISATION, CodeErreur.ORGANISATION_NON_EN_CHARGE),
+        ],
+    )
+    def test_reserve_a_la_mairie(self, signalement, creer_utilisateur, client_connecte, role, code):
         client = client_connecte(creer_utilisateur(role=role))
-        erreur(poster(client, signalement, "changer-statut", {"statut": "RECU"}), CodeErreur.PERMISSION_REFUSEE, 403)
+        erreur(poster(client, signalement, "changer-statut", {"statut": "RECU"}), code, 403)
         signalement.refresh_from_db()
         assert signalement.statut == Statut.SOUMIS
 

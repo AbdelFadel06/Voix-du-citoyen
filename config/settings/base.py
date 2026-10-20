@@ -261,6 +261,8 @@ SPECTACULAR_SETTINGS = {
         "RolePersonnelEnum": "apps.accounts.serializers.ROLES_PERSONNEL",
         "TypeMediaEnum": "apps.medias.models.Media.Type",
         "TypeNotificationEnum": "apps.notifications.models.Notification.Type",
+        "TypeOrganisationEnum": "apps.accounts.models.Organisation.Type",
+        "StatutHabilitationEnum": "apps.accounts.models.Organisation.StatutHabilitation",
         "StatutRealisationEnum": "apps.realisations.models.Realisation.Statut",
         "TypeEvenementSignalementEnum": "apps.signalements.models.SuiviSignalement.TypeEvenement",
         "TypeEvenementSuggestionEnum": "apps.suggestions.models.SuiviSuggestion.TypeEvenement",

@@ -7,7 +7,13 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from apps.core.codes_erreur import CodeErreur
 from apps.core.communes import cloisonner
-from apps.core.permissions import EstAgentMairie, EstCitoyen, est_personnel_mairie
+from apps.core.permissions import (
+    EstAgentMairie,
+    EstCitoyen,
+    EstMairieOuOrganisation,
+    EstOrganisationHabilitee,
+    est_personnel_mairie,
+)
 from apps.core.visibilite import communes_autorisees, limiter_aux_communes, limiter_aux_secteurs, secteurs_autorises
 from apps.core.reponses import reponse_succes
 from apps.core.schema import (
@@ -27,6 +33,7 @@ from . import exemples, services
 from .filters import SignalementFilter
 from .models import Signalement, SuiviSignalement
 from .serializers import (
+    AffectationOrganisationSerializer,
     AssignationSerializer,
     ChangementStatutSignalementSerializer,
     ReponseSignalementSerializer,
@@ -36,8 +43,8 @@ from .serializers import (
     SignalementListSerializer,
 )
 
-ACTIONS_MAIRIE = {"changer_statut", "assigner", "repondre"}
-ACTIONS_DETAIL = {"retrieve", "create", *ACTIONS_MAIRIE}
+ACTIONS_MAIRIE = {"assigner", "repondre", "affecter_organisation"}
+ACTIONS_DETAIL = {"retrieve", "create", "changer_statut", "prendre_en_charge", *ACTIONS_MAIRIE}
 
 EXEMPLE_INTROUVABLE = exemple_erreur(CodeErreur.RESSOURCE_INTROUVABLE, nom="Signalement inconnu")
 EXEMPLE_RESERVE_MAIRIE = exemple_erreur(
@@ -178,6 +185,11 @@ class SignalementViewSet(
             return [IsAuthenticated(), EstCitoyen()]
         if self.action in ACTIONS_MAIRIE:
             return [IsAuthenticated(), EstAgentMairie()]
+        if self.action == "changer_statut":
+            # Organisation : seulement sur un dossier dont elle est en charge (contrôlé par le service).
+            return [IsAuthenticated(), EstMairieOuOrganisation()]
+        if self.action == "prendre_en_charge":
+            return [IsAuthenticated(), EstOrganisationHabilitee()]
         return [IsAuthenticated()]
 
     def get_throttles(self):
@@ -192,7 +204,8 @@ class SignalementViewSet(
     def get_queryset(self):
         queryset = cloisonner(
             Signalement.objects.select_related(
-                "commune", "secteur", "quartier__arrondissement", "auteur", "service_assigne", "agent_assigne"
+                "commune", "secteur", "quartier__arrondissement", "auteur", "service_assigne", "agent_assigne",
+                "organisation_assignee",
             ).prefetch_related("medias"),
             self.request.user,
         )
@@ -202,7 +215,7 @@ class SignalementViewSet(
         if self.action == "mes_signalements" and not getattr(self, "swagger_fake_view", False):
             queryset = queryset.filter(auteur=self.request.user)
         if self.action in ACTIONS_DETAIL:
-            suivis = SuiviSignalement.objects.select_related("auteur")
+            suivis = SuiviSignalement.objects.select_related("auteur__organisation")
             if not est_personnel_mairie(self.request.user):
                 suivis = suivis.filter(visible_citoyen=True)
             queryset = queryset.select_related("description_audio", "doublon_de").prefetch_related(
@@ -286,7 +299,13 @@ citoyen, avec le `commentaire`).
 Une transition impossible donne `TRANSITION_STATUT_INVALIDE` avec, dans `details`, le statut
 actuel et les statuts possibles.
 
-**Connecté** : agents et admins mairie.
+**Organisation en charge** : l'organisation à qui le dossier est confié (elle l'a pris en charge,
+ou la mairie le lui a confié) peut le faire avancer vers `RECU`, `EN_COURS` et `RESOLU`, avec un
+`commentaire` visible par le citoyen. Rejeter ou classer en doublon reste réservé à la mairie
+(`PERMISSION_REFUSEE`). Une organisation qui n'est pas en charge reçoit
+`ORGANISATION_NON_EN_CHARGE` (403). L'historique indique le nom de l'organisation.
+
+**Connecté** : agents et admins mairie ; organisation en charge du dossier.
 """,
         request=ChangementStatutSignalementSerializer,
         responses={200: enveloppe(SignalementDetailSerializer), **erreurs(400, 401, 403, 404, 409)},
@@ -306,7 +325,7 @@ actuel et les statuts possibles.
                 nom="Rejet sans motif",
             ),
             EXEMPLE_INTROUVABLE,
-            EXEMPLE_RESERVE_MAIRIE,
+            exemple_erreur(CodeErreur.ORGANISATION_NON_EN_CHARGE),
             *EXEMPLES_AUTH_REQUISE,
         ],
     )
@@ -359,6 +378,89 @@ Un dossier clos (`RESOLU`, `REJETE`, `DOUBLON`) ne peut plus être assigné
         entree.is_valid(raise_exception=True)
         services.assigner(signalement, par=request.user, **entree.validated_data)
         return reponse_succes(self._detail(signalement.pk), "Dossier assigné.")
+
+    @extend_schema(
+        tags=[TAG_SIGNALEMENTS],
+        summary="Prendre en charge un signalement (organisation)",
+        description="""
+L'organisation connectée **se confie** ce signalement : son nom apparaît alors comme
+organisation en charge (`organisation_assignee`), pour tous, et elle peut faire avancer le
+statut (`/changer-statut/`). Les autres organisations de la zone continuent de voir le
+signalement, avec le nom de l'organisation en charge.
+
+**Conditions**
+- Le signalement est dans son périmètre (commune et secteur d'intervention), sinon 404.
+- Aucune organisation n'en est encore chargée, sinon `SIGNALEMENT_DEJA_PRIS_EN_CHARGE` (409) :
+  afficher le nom de l'organisation en charge.
+- Il n'est pas clos (`RESOLU`, `REJETE`, `DOUBLON`), sinon `SIGNALEMENT_CLOTURE` (409).
+- Renvoyer la requête quand on en est déjà chargé est sans effet.
+
+L'historique indique au citoyen que son dossier est pris en charge par l'organisation.
+Pour voir les dossiers encore libres : `GET /signalements/?pris_en_charge=false`.
+
+**Connecté** : organisations habilitées.
+""",
+        request=None,
+        responses={200: enveloppe(SignalementDetailSerializer), **erreurs(401, 403, 404, 409)},
+        examples=[
+            exemple_succes("Dossier pris en charge", exemples.DETAIL_ORGANISATION, "Vous êtes en charge de ce signalement."),
+            exemple_erreur(CodeErreur.SIGNALEMENT_DEJA_PRIS_EN_CHARGE),
+            exemple_erreur(CodeErreur.SIGNALEMENT_CLOTURE),
+            exemple_erreur(
+                CodeErreur.PERMISSION_REFUSEE, "Action réservée aux organisations habilitées.", nom="Pas une organisation"
+            ),
+            EXEMPLE_INTROUVABLE,
+            *EXEMPLES_AUTH_REQUISE,
+        ],
+    )
+    @action(detail=True, methods=["post"], url_path="prendre-en-charge")
+    def prendre_en_charge(self, request, pk=None):
+        signalement = services.prendre_en_charge(self.get_object(), par=request.user)
+        return reponse_succes(self._detail(signalement.pk), "Vous êtes en charge de ce signalement.")
+
+    @extend_schema(
+        tags=[TAG_SIGNALEMENTS],
+        summary="Confier un signalement à une organisation",
+        description="""
+La mairie confie le dossier à une **organisation** (ONG, OSC), qui pourra alors faire avancer son
+statut. Elle remplace l'organisation éventuellement déjà en charge ; `{"organisation": null}` la
+retire. Une seule organisation à la fois.
+
+- L'organisation doit être **habilitée** et intervenir dans la **commune et le secteur** du
+  dossier, sinon `VALIDATION_ERREUR` sur `organisation`.
+- Impossible sur un dossier clos (`SIGNALEMENT_CLOTURE`).
+- Les comptes de l'organisation reçoivent une notification `AFFECTATION_SIGNALEMENT` ;
+  l'historique l'indique au citoyen.
+
+Pour choisir l'organisation : `GET /organisations/?commune=…&secteur=…`.
+
+**Connecté** : agents et admins mairie.
+""",
+        request=AffectationOrganisationSerializer,
+        responses={200: enveloppe(SignalementDetailSerializer), **erreurs(400, 401, 403, 404, 409)},
+        examples=[
+            exemple_requete("Confier", {"organisation": 2}),
+            exemple_requete("Retirer", {"organisation": None}),
+            exemple_succes("Dossier confié", exemples.DETAIL_MAIRIE_ORGANISATION, "Dossier confié à l'organisation."),
+            exemple_erreur(
+                CodeErreur.VALIDATION_ERREUR,
+                details={"organisation": ["Cette organisation n'intervient pas dans la commune ou le secteur de ce dossier."]},
+                nom="Hors du périmètre de l'organisation",
+            ),
+            exemple_erreur(CodeErreur.SIGNALEMENT_CLOTURE),
+            EXEMPLE_INTROUVABLE,
+            EXEMPLE_RESERVE_MAIRIE,
+            *EXEMPLES_AUTH_REQUISE,
+        ],
+    )
+    @action(detail=True, methods=["post"], url_path="affecter-organisation")
+    def affecter_organisation(self, request, pk=None):
+        signalement = self.get_object()
+        entree = AffectationOrganisationSerializer(data=request.data)
+        entree.is_valid(raise_exception=True)
+        signalement = services.affecter_organisation(signalement, par=request.user, **entree.validated_data)
+        message = "Dossier confié à l'organisation." if signalement.organisation_assignee_id else "Organisation retirée du dossier."
+        return reponse_succes(self._detail(signalement.pk), message)
 
     @extend_schema(
         tags=[TAG_SIGNALEMENTS],
