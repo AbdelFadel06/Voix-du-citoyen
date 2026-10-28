@@ -236,8 +236,8 @@ def connecter(password, telephone=None, email=None):
         candidat = Utilisateur.objects.filter(email__iexact=normaliser_email(email)).first()
     else:
         candidat = Utilisateur.objects.filter(telephone=telephone).first()
-    if not _verifier_mot_de_passe(candidat, password):
-        raise ErreurMetier(CodeErreur.IDENTIFIANTS_INVALIDES)
+    if not _verifier_mot_de_passe(candidat, password) or hasattr(candidat, "institution"):
+        raise ErreurMetier(CodeErreur.IDENTIFIANTS_INVALIDES)  # compte technique : clé d'API uniquement
 
     par_email = candidat.role in Utilisateur.ROLES_CONNEXION_EMAIL
     if email and not par_email:
@@ -288,6 +288,8 @@ def _compte_a_reinitialiser(telephone=None, email=None):
     else:
         compte = Utilisateur.objects.filter(telephone=telephone).first()
         valide = compte is not None and compte.role == Role.CITOYEN and compte.telephone_verifie
+    # Compte technique d'une institution IBDC : jamais de mot de passe (clé d'API uniquement).
+    valide = valide and not hasattr(compte, "institution")
     return compte if valide and compte.is_active else None
 
 

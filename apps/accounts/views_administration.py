@@ -355,6 +355,7 @@ class AgentViewSet(VueAdministration):
     def get_queryset(self):
         queryset = (
             Utilisateur.objects.filter(role__in=[Utilisateur.Role.AGENT, Utilisateur.Role.ADMIN_MAIRIE])
+            .filter(institution__isnull=True)  # comptes techniques IBDC : gérés par la plateforme
             .select_related("service", "commune")
             .order_by("nom", "prenoms")
         )

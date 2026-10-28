@@ -143,6 +143,24 @@ class TestAuthentification:
         )
         assert reponse.json()["erreur"]["code"] == CodeErreur.IDENTIFIANTS_INVALIDES
 
+    def test_compte_technique_sans_mot_de_passe_possible(self, api_client, institution):
+        # Ni code de réinitialisation envoyé, ni connexion même si un mot de passe était posé.
+        from django.core import mail
+
+        api_client.post(reverse("accounts:password-reset"), {"email": "ibdc-parakou@mairie.bj"}, format="json")
+        assert mail.outbox == []
+        compte = institution.compte
+        compte.set_password("motdepasse")
+        compte.save()
+        reponse = api_client.post(
+            reverse("accounts:login"), {"email": "ibdc-parakou@mairie.bj", "password": "motdepasse"}, format="json"
+        )
+        assert reponse.json()["erreur"]["code"] == CodeErreur.IDENTIFIANTS_INVALIDES
+
+    def test_absent_de_la_liste_des_agents(self, institution):
+        reponse = client_cle(institution.cle).get(reverse("accounts:agents"))
+        assert institution.compte.pk not in [a["id"] for a in reponse.json()["donnees"]]
+
 
 class TestAgentExterne:
     def changer_statut(self, client, dossier, **entetes):
