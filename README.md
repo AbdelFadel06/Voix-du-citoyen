@@ -428,6 +428,18 @@ SMS_BACKEND=apps.core.sms.backends.console.ConsoleSMS
 PUSH_BACKEND=apps.core.push.backends.console.ConsolePush
 ```
 
+Pour envoyer de vrais e-mails (codes « mot de passe oublié » de la mairie et des organisations),
+ajouter un service SMTP ; sans ces lignes, les e-mails s'affichent dans les journaux :
+
+```bash
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp-relay.brevo.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=...
+EMAIL_HOST_PASSWORD='...'
+DEFAULT_FROM_EMAIL='Voix du Citoyen <no-reply@piecitizenvoice.com>'
+```
+
 `config.settings.preprod` = la production, mais les codes OTP et les notifications
 s'affichent dans les journaux (`site logs api.piecitizenvoice.com`) tant qu'aucun vrai
 fournisseur SMS / push n'est branché. Ensuite : `config.settings.prod` et les vrais backends.
@@ -441,3 +453,19 @@ site manage api.piecitizenvoice.com createsuperuser
 
 Tâches quotidiennes à faire planifier par l'administration (ou à lancer à la main) :
 `site manage api.piecitizenvoice.com purger_medias` et `… flushexpiredtokens`.
+
+### Connecter une mairie de la plateforme IBDC
+
+Une fois la commune créée, sur le serveur :
+
+```bash
+site manage api.piecitizenvoice.com creer_institution --id-externe <id chez IBDC> \
+    --nom "Mairie de Parakou" --commune PKO --email <contact technique> --telephone <+229…>
+```
+
+La commande affiche la **clé d'API une seule fois** : la transmettre à l'équipe IBDC par un
+canal sûr. Pour en générer une autre (l'ancienne cesse de fonctionner) :
+`site manage api.piecitizenvoice.com nouvelle_cle_institution --id-externe <id>`, ou l'action
+« Générer une nouvelle clé » dans l'admin Django (**Interopérabilité → Institutions**), où l'on
+peut aussi désactiver une institution.
+

@@ -67,7 +67,7 @@ def soutenir(suggestion, citoyen):
     _controler_soutien(suggestion, citoyen)
     _, cree = Soutien.objects.get_or_create(suggestion=suggestion, citoyen=citoyen)
     if cree:
-        Suggestion.objects.filter(pk=suggestion.pk).update(nb_soutiens=F("nb_soutiens") + 1)
+        Suggestion.objects.filter(pk=suggestion.pk).update(nb_soutiens=F("nb_soutiens") + 1, maj_le=timezone.now())
         suggestion.refresh_from_db(fields=["nb_soutiens"])
     return suggestion
 
@@ -79,7 +79,7 @@ def retirer_soutien(suggestion, citoyen):
     _controler_soutien(suggestion, citoyen)
     supprimes, _ = Soutien.objects.filter(suggestion=suggestion, citoyen=citoyen).delete()
     if supprimes:
-        Suggestion.objects.filter(pk=suggestion.pk).update(nb_soutiens=F("nb_soutiens") - 1)
+        Suggestion.objects.filter(pk=suggestion.pk).update(nb_soutiens=F("nb_soutiens") - 1, maj_le=timezone.now())
         suggestion.refresh_from_db(fields=["nb_soutiens"])
     return suggestion
 

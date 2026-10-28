@@ -36,9 +36,16 @@ class RealisationFilter(django_filters.FilterSet):
         help_text="`true` : réalisations de la mairie ; `false` : réalisations des organisations.",
     )
 
+    modifie_depuis = django_filters.IsoDateTimeFilter(
+        field_name="maj_le",
+        lookup_expr="gte",
+        help_text="Seulement les éléments créés ou modifiés depuis cet instant (ISO 8601, ex. "
+        "`2026-10-27T09:00:00+01:00`) : pour une actualisation légère, ne récupérer que les changements.",
+    )
+
     class Meta:
         model = Realisation
-        fields = ["statut", "secteur", "quartier", "date_debut", "date_fin", "publie", "commune", "organisation", "par_la_mairie"]
+        fields = ["statut", "secteur", "quartier", "date_debut", "date_fin", "publie", "commune", "organisation", "par_la_mairie", "modifie_depuis"]
 
     def filtrer_publication(self, queryset, name, valeur):
         utilisateur = getattr(self.request, "user", None)

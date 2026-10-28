@@ -76,6 +76,7 @@ LOCAL_APPS = [
     "apps.realisations",
     "apps.notifications",
     "apps.dashboard",
+    "apps.interop",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -137,11 +138,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Mots de passe
 # ---------------------------------------------------------------------------
 
+# Une seule règle, pensée pour les citoyens (une partie est peu à l'aise avec l'écrit) :
+# 6 caractères minimum, sans autre contrainte (un code à 6 chiffres est accepté).
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 6}},
 ]
 
 # ---------------------------------------------------------------------------
@@ -211,6 +211,7 @@ CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "apps.core.authentication.AuthentificationJWT",
+        "apps.interop.authentication.AuthentificationCleApi",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -229,7 +230,9 @@ REST_FRAMEWORK = {
     "ORDERING_PARAM": "tri",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "apps.core.exceptions.gestionnaire_exceptions",
+    "DEFAULT_THROTTLE_CLASSES": ["apps.interop.throttling.ThrottleCleApi"],
     "DEFAULT_THROTTLE_RATES": {
+        "cle_api": env("CLE_API_DEBIT", default="600/minute"),
         "otp": "5/hour",
         "creation_signalement": "10/day",
         "televersement": "60/hour",
@@ -295,6 +298,23 @@ SMS_BACKEND = env("SMS_BACKEND", default=SMS_BACKEND_CONSOLE)
 
 PUSH_BACKEND_CONSOLE = "apps.core.push.backends.console.ConsolePush"
 PUSH_BACKEND = env("PUSH_BACKEND", default=PUSH_BACKEND_CONSOLE)
+
+# ---------------------------------------------------------------------------
+# E-mails (codes « mot de passe oublié » de la mairie et des organisations)
+# Par défaut, les e-mails sont affichés dans les journaux au lieu d'être envoyés (comme les
+# SMS) ; un vrai service SMTP (Brevo, Gmail, serveur de LE BAROMETRE…) se branche par .env.
+# ---------------------------------------------------------------------------
+
+EMAIL_BACKEND_CONSOLE = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = env("EMAIL_BACKEND", default=EMAIL_BACKEND_CONSOLE)
+EMAIL_HOST = env("EMAIL_HOST", default="localhost")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+EMAIL_TIMEOUT = 15
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Voix du Citoyen <no-reply@piecitizenvoice.com>")
 
 # Passe à True dans prod.py : active les contrôles qui bloquent le démarrage.
 EST_PRODUCTION = False

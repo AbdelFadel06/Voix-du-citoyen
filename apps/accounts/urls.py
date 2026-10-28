@@ -16,6 +16,7 @@ urlpatterns = [
     path("auth/me/", views.MoiView.as_view(), name="me"),
     path("auth/password/reset/", views.DemandeReinitialisationView.as_view(), name="password-reset"),
     path("auth/password/reset/confirm/", views.ReinitialisationView.as_view(), name="password-reset-confirm"),
+    path("auth/password/change/", views.ChangementMotDePasseView.as_view(), name="password-change"),
 ]
 
 # Gestion par les admins mairie
@@ -28,6 +29,29 @@ urlpatterns += [
     path("services/<int:pk>/", admin_views.ServiceMunicipalViewSet.as_view(DETAIL), name="service-detail"),
     path("agents/", admin_views.AgentViewSet.as_view(LECTURE_CREATION), name="agents"),
     path("agents/<int:pk>/", admin_views.AgentViewSet.as_view(DETAIL), name="agent-detail"),
-    path("organisations/", OrganisationViewSet.as_view({"get": "list"}), name="organisations"),
-    path("organisations/<int:pk>/", OrganisationViewSet.as_view({"get": "retrieve"}), name="organisation-detail"),
+    path("organisations/", OrganisationViewSet.as_view({"get": "list", "post": "create"}), name="organisations"),
+    path(
+        "organisations/<int:pk>/",
+        OrganisationViewSet.as_view({"get": "retrieve", "patch": "partial_update"}),
+        name="organisation-detail",
+    ),
+    path(
+        "organisations/<int:pk>/retirer-commune/",
+        OrganisationViewSet.as_view({"post": "retirer_commune"}),
+        name="organisation-retirer-commune",
+    ),
+    path("organisations/<int:pk>/suspendre/", OrganisationViewSet.as_view({"post": "suspendre"}), name="organisation-suspendre"),
+    path(
+        "organisations/<int:pk>/rehabiliter/", OrganisationViewSet.as_view({"post": "rehabiliter"}), name="organisation-rehabiliter"
+    ),
+    path(
+        "organisations/<int:pk>/membres/",
+        OrganisationViewSet.as_view({"get": "membres", "post": "creer_membre"}),
+        name="organisation-membres",
+    ),
+    path(
+        "organisations/<int:pk>/membres/<int:membre_id>/",
+        OrganisationViewSet.as_view({"patch": "modifier_membre"}),
+        name="organisation-membre",
+    ),
 ]

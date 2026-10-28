@@ -111,6 +111,9 @@ class SuiviSuggestion(ModeleHorodate):
         related_name="suivis_suggestions",
         verbose_name="auteur",
     )
+    # Nom de l'agent d'une application tierce (IBDC, en-tête `X-Agent`) quand l'événement vient
+    # de son compte technique ; rempli automatiquement à l'enregistrement.
+    agent_externe = models.CharField("agent (application tierce)", max_length=150, blank=True)
 
     class Meta:
         verbose_name = "suivi de suggestion"
@@ -126,3 +129,8 @@ class SuiviSuggestion(ModeleHorodate):
 
     def __str__(self):
         return f"{self.suggestion.reference} – {self.get_type_evenement_display()}"
+
+    def save(self, *args, **kwargs):
+        if not self.agent_externe and self.auteur_id:
+            self.agent_externe = getattr(self.auteur, "agent_externe", "")
+        super().save(*args, **kwargs)

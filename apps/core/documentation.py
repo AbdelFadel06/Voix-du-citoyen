@@ -58,6 +58,19 @@ vaut pour les suggestions et les réalisations.
    pour ouvrir le bon écran ; la liste complète est dans `GET /api/v1/notifications/`.
 3. À la déconnexion : envoyer `token_fcm` à `POST /api/v1/auth/logout/`.
 
+### Application tierce d'une mairie (IBDC)
+
+Une plateforme de mairie connectée (IBDC) n'utilise pas de jeton de connexion : elle envoie,
+**depuis son serveur uniquement**, la clé de son institution dans l'en-tête
+`X-Api-Key: vdc_…` (bouton **Authorize**, champ `cleApi`). Chaque clé correspond à une
+mairie (institution) et donc à une commune : les appels ont les droits d'un admin mairie de
+cette commune, avec le même cloisonnement. Une clé invalide ou désactivée donne
+`CLE_API_INVALIDE` (401). Les clés sont fournies par l'équipe Voix du Citoyen.
+Envoyez aussi le nom de l'agent qui agit dans `X-Agent` (texte encodé en URL, ex.
+`Rodrigue%20Ahouansou`) : il apparaît dans l'historique des dossiers. Pour rafraîchir sans tout
+recharger, les listes acceptent `?modifie_depuis=<date ISO 8601>`. Limite : 600 appels par minute
+et par clé (`TROP_DE_REQUETES` au-delà).
+
 ---
 
 ## Format des réponses

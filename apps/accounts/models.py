@@ -124,6 +124,9 @@ class Utilisateur(ModeleHorodate, AbstractBaseUser, PermissionsMixin):
         verbose_name="service municipal",
     )
     telephone_verifie = models.BooleanField("téléphone vérifié", default=False)
+    # Vrai quand un admin a fixé le mot de passe (création du compte, nouveau mot de passe) :
+    # l'interface invite la personne à le changer. Remis à faux dès qu'elle le change elle-même.
+    mot_de_passe_provisoire = models.BooleanField("mot de passe provisoire", default=False)
     is_active = models.BooleanField("actif", default=True)
     is_staff = models.BooleanField("accès à l'administration", default=False)
     date_joined = models.DateTimeField("date d'inscription", default=timezone.now)
@@ -212,10 +215,13 @@ class Organisation(ModeleHorodate):
     nom = models.CharField("nom", max_length=200)
     sigle = models.CharField("sigle", max_length=50, blank=True)
     type = models.CharField("type", max_length=10, choices=Type.choices)
+    # Facultatif pour l'instant ; s'il est renseigné, il est unique (un vide est enregistré NULL).
     numero_enregistrement = models.CharField(
         "numéro d'enregistrement",
         max_length=100,
         unique=True,
+        null=True,
+        blank=True,
         error_messages={"unique": "Une organisation existe déjà avec ce numéro d'enregistrement."},
     )
     email = models.EmailField("adresse e-mail", blank=True)
@@ -276,8 +282,13 @@ class Organisation(ModeleHorodate):
     def __str__(self):
         return self.sigle or self.nom
 
+    def save(self, *args, **kwargs):
+        self.numero_enregistrement = (self.numero_enregistrement or "").strip() or None
+        super().save(*args, **kwargs)
+
     def clean(self):
         super().clean()
+        self.numero_enregistrement = (self.numero_enregistrement or "").strip() or None
         self.motif_suspension = self.motif_suspension.strip()
         if self.statut_habilitation == self.StatutHabilitation.HABILITEE:
             self.motif_suspension = ""

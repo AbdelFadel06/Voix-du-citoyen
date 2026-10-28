@@ -224,7 +224,7 @@ EXEMPLE_AGENT_INVALIDE = exemple_erreur(
     CodeErreur.VALIDATION_ERREUR,
     details={
         "service": ["Un agent doit être rattaché à un service municipal."],
-        "mot_de_passe": ["Ce mot de passe est trop court. Il doit contenir au minimum 8 caractères."],
+        "mot_de_passe": ["Ce mot de passe est trop court. Il doit contenir au minimum 6 caractères."],
     },
     nom="Données invalides",
 )

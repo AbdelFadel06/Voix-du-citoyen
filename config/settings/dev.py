@@ -19,5 +19,6 @@ REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] = [
 ]
 REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"] = [
     "apps.core.authentication.AuthentificationJWT",
+    "apps.interop.authentication.AuthentificationCleApi",
     "rest_framework.authentication.SessionAuthentication",
 ]

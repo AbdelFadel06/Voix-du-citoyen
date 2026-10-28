@@ -103,8 +103,9 @@ class SuiviSerializer(ChampsMairieMixin, serializers.ModelSerializer):
         help_text="Nom de l'organisation (ONG, OSC) à l'origine de l'événement, ou `null`."
     )
     auteur_nom = serializers.SerializerMethodField(
-        help_text="Nom de l'agent à l'origine de l'événement (agents et admins uniquement) ; `null` "
-        "pour un événement du citoyen (ex. le dépôt), dont l'identité n'est jamais montrée."
+        help_text="Nom de l'agent à l'origine de l'événement (agents et admins uniquement), suivi de "
+        "« (IBDC) » s'il a agi depuis la plateforme IBDC ; `null` pour un événement du citoyen (ex. le "
+        "dépôt), dont l'identité n'est jamais montrée."
     )
 
     class Meta:
@@ -140,6 +141,8 @@ class SuiviSerializer(ChampsMairieMixin, serializers.ModelSerializer):
         return suivi.auteur.organisation.nom
 
     def get_auteur_nom(self, suivi) -> str | None:
+        if suivi.agent_externe:  # agent de la mairie passé par une application tierce (IBDC)
+            return f"{suivi.agent_externe} (IBDC)"
         if suivi.auteur.role not in ROLES_MAIRIE:
             return None  # le citoyen reste anonyme, y compris pour la mairie
         return f"{suivi.auteur.prenoms} {suivi.auteur.nom}".strip()

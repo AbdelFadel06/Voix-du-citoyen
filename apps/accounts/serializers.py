@@ -15,7 +15,7 @@ AIDE_TELEPHONE = (
     "Numéro béninois, au format national (`0197123456`) ou international (`+2290197123456`)."
 )
 AIDE_MOT_DE_PASSE = (
-    "Au moins 8 caractères, pas uniquement des chiffres, pas trop proche du nom ni trop courant."
+    "Au moins 6 caractères (lettres, chiffres ou les deux : un code à 6 chiffres convient)."
 )
 
 
@@ -136,9 +136,10 @@ class UtilisateurSerializer(serializers.ModelSerializer):
             "organisation",
             "service",
             "telephone_verifie",
+            "mot_de_passe_provisoire",
             "date_joined",
         ]
-        read_only_fields = ["id", "telephone", "role", "telephone_verifie", "date_joined"]
+        read_only_fields = ["id", "telephone", "role", "telephone_verifie", "mot_de_passe_provisoire", "date_joined"]
         extra_kwargs = {
             "id": {"help_text": "Identifiant de l'utilisateur."},
             "telephone": {
@@ -153,6 +154,11 @@ class UtilisateurSerializer(serializers.ModelSerializer):
             },
             "role": {"help_text": "Rôle du compte, qui détermine ses droits. Non modifiable."},
             "telephone_verifie": {"help_text": "Vrai une fois le numéro confirmé par le code SMS."},
+            "mot_de_passe_provisoire": {
+                "help_text": "Vrai si le mot de passe a été fixé par un administrateur (création du compte, "
+                "nouveau mot de passe) : afficher l'écran de changement de mot de passe "
+                "(`POST /auth/password/change/`). Repasse à faux dès que la personne le change."
+            },
             "date_joined": {"help_text": "Date de création du compte."},
         }
 
@@ -599,7 +605,7 @@ class OrganisationDetailSerializer(OrganisationListeSerializer):
         read_only_fields = fields
         extra_kwargs = {
             **OrganisationListeSerializer.Meta.extra_kwargs,
-            "numero_enregistrement": {"help_text": "Numéro d'enregistrement officiel."},
+            "numero_enregistrement": {"help_text": "Numéro d'enregistrement officiel, ou `null` s'il n'est pas renseigné."},
             "email": {"help_text": "E-mail de contact de l'organisation."},
             "telephone": {"help_text": "Téléphone de contact de l'organisation."},
             "adresse": {"help_text": "Adresse de l'organisation."},
@@ -614,3 +620,130 @@ class OrganisationDetailSerializer(OrganisationListeSerializer):
     @extend_schema_field(StatistiquesParSecteurSerializer(many=True))
     def get_statistiques_par_secteur(self, organisation):
         return self.context["statistiques"][organisation.pk]["par_secteur"]
+
+
+# ---------------------------------------------------------------------------
+# Gestion des organisations par la mairie (écriture)
+# ---------------------------------------------------------------------------
+
+
+class OrganisationEcritureSerializer(serializers.Serializer):
+    """Création (`POST`) et modification partielle (`PATCH`) d'une organisation."""
+
+    nom = serializers.CharField(max_length=200, help_text="Nom complet de l'organisation.")
+    sigle = serializers.CharField(max_length=50, required=False, allow_blank=True, help_text="Sigle (facultatif).")
+    type = serializers.ChoiceField(choices=Organisation.Type.choices, help_text="`ONG`, `OSC` ou `AUTRE`.")
+    numero_enregistrement = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        help_text="Numéro d'enregistrement officiel, **facultatif** pour l'instant mais recommandé : il "
+        "identifie l'organisation. S'il est déjà connu, elle n'est pas recréée (votre commune et vos "
+        "secteurs sont ajoutés à son périmètre). Sans numéro, une nouvelle fiche est toujours créée.",
+    )
+    email = serializers.EmailField(required=False, allow_blank=True, help_text="E-mail de contact de l'organisation.")
+    telephone = PhoneNumberField(
+        required=False,
+        allow_blank=True,
+        error_messages={"invalid": MESSAGE_TELEPHONE_INVALIDE},
+        help_text="Téléphone de contact de l'organisation.",
+    )
+    adresse = serializers.CharField(max_length=255, required=False, allow_blank=True, help_text="Adresse.")
+    date_expiration = serializers.DateField(
+        required=False, allow_null=True, help_text="Fin de l'habilitation (AAAA-MM-JJ), ou `null` : sans limite."
+    )
+    secteurs = serializers.PrimaryKeyRelatedField(
+        queryset=Secteur.objects.filter(actif=True),
+        many=True,
+        required=False,
+        error_messages={"does_not_exist": "Ce secteur n'existe pas ou n'est plus actif."},
+        help_text="Secteurs d'intervention (identifiants de `GET /secteurs/`). En `PATCH`, la liste "
+        "**remplace** la précédente. Ils valent pour toutes ses communes.",
+    )
+    communes = serializers.PrimaryKeyRelatedField(
+        queryset=Commune.objects.all(),
+        many=True,
+        required=False,
+        error_messages={"does_not_exist": "Cette commune n'est pas desservie par la plateforme."},
+        help_text="Communes d'intervention. **Admin de la plateforme uniquement** ; pour une mairie, "
+        "c'est toujours sa commune (champ ignoré).",
+    )
+
+
+class MembreOrganisationSerializer(serializers.ModelSerializer):
+    actif = serializers.BooleanField(source="is_active", help_text="Faux si le compte est désactivé.")
+
+    class Meta:
+        model = Utilisateur
+        fields = ["id", "telephone", "nom", "prenoms", "email", "actif", "date_joined", "last_login"]
+        read_only_fields = fields
+        extra_kwargs = {
+            "id": {"help_text": "Identifiant du compte."},
+            "telephone": {"help_text": "Téléphone du membre."},
+            "nom": {"help_text": "Nom."},
+            "prenoms": {"help_text": "Prénom(s)."},
+            "email": {"help_text": "Adresse e-mail, identifiant de connexion."},
+            "date_joined": {"help_text": "Date de création du compte."},
+            "last_login": {"help_text": "Dernière connexion, ou `null`."},
+        }
+
+
+class _MembreEcritureSerializer(serializers.Serializer):
+    nom = serializers.CharField(max_length=100, help_text="Nom.")
+    prenoms = serializers.CharField(max_length=150, help_text="Prénom(s).")
+    email = serializers.EmailField(help_text="Adresse e-mail, **identifiant de connexion** (unique).")
+    mot_de_passe = serializers.CharField(
+        write_only=True, trim_whitespace=False, style={"input_type": "password"}, help_text=AIDE_MOT_DE_PASSE
+    )
+
+    def validate_mot_de_passe(self, valeur):
+        try:
+            validate_password(valeur)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return valeur
+
+
+class MembreCreationSerializer(_MembreEcritureSerializer):
+    telephone = champ_telephone(AIDE_TELEPHONE)
+
+    def validate_telephone(self, valeur):
+        if valeur.country_code != 229:
+            raise serializers.ValidationError("Saisissez un numéro de téléphone béninois (+229).")
+        return valeur
+
+
+class MembreModificationSerializer(_MembreEcritureSerializer):
+    actif = serializers.BooleanField(
+        required=False, help_text="`false` désactive le compte : la personne ne peut plus se connecter."
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for champ in self.fields.values():
+            champ.required = False
+        self.fields["mot_de_passe"].help_text = "Nouveau mot de passe (facultatif). " + AIDE_MOT_DE_PASSE
+
+
+class SuspensionOrganisationSerializer(serializers.Serializer):
+    motif = serializers.CharField(help_text="Motif de la suspension, communiqué à l'organisation. **Obligatoire.**")
+
+
+class RetraitCommuneSerializer(serializers.Serializer):
+    commune = champ_commune(
+        "Commune à retirer. Uniquement pour un admin de la plateforme ; pour une mairie, c'est sa commune.",
+        required=False,
+    )
+
+
+class ChangementMotDePasseSerializer(serializers.Serializer):
+    ancien_mot_de_passe = serializers.CharField(
+        trim_whitespace=False, style={"input_type": "password"}, help_text="Mot de passe actuel."
+    )
+    nouveau_mot_de_passe = serializers.CharField(
+        trim_whitespace=False,
+        style={"input_type": "password"},
+        help_text="Nouveau mot de passe, différent de l'actuel. " + AIDE_MOT_DE_PASSE,
+    )
+

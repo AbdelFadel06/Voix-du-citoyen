@@ -22,6 +22,7 @@ from apps.core.throttling import ThrottleOTP
 
 from . import exemples, services
 from .serializers import (
+    ChangementMotDePasseSerializer,
     ConnexionSerializer,
     DeconnexionSerializer,
     DemandeReinitialisationSerializer,
@@ -42,8 +43,10 @@ MESSAGE_RENVOI = "Si une inscription est en attente pour ce numéro, un nouveau 
 MESSAGE_CONNEXION = "Connexion réussie."
 MESSAGE_PROFIL = "Votre profil a été mis à jour."
 MESSAGE_DEMANDE_REINITIALISATION = (
-    "Si un compte correspond, un code de vérification a été envoyé par SMS au numéro du compte."
+    "Si un compte correspond, un code de vérification a été envoyé (par SMS pour un citoyen, "
+    "par e-mail pour la mairie et les organisations)."
 )
+MESSAGE_CHANGEMENT = "Votre mot de passe a été modifié. Vos autres sessions ont été fermées."
 MESSAGE_REINITIALISATION = "Votre mot de passe a été modifié. Connectez-vous avec le nouveau mot de passe."
 
 EXEMPLE_TELEPHONE_INVALIDE = exemple_erreur(
@@ -120,8 +123,7 @@ confondus), sinon `TROP_DE_REQUETES` (429).
                     "telephone": ["Saisissez un numéro de téléphone béninois (+229)."],
                     "prenoms": ["Ce champ est obligatoire."],
                     "password": [
-                        "Ce mot de passe est trop court. Il doit contenir au minimum 8 caractères.",
-                        "Ce mot de passe est entièrement numérique.",
+                        "Ce mot de passe est trop court. Il doit contenir au minimum 6 caractères.",
                     ],
                 },
                 nom="Champs invalides",
@@ -306,24 +308,24 @@ class DemandeReinitialisationView(VuePublique):
         tags=[TAG_AUTH],
         summary="Demander un code pour changer de mot de passe",
         description="""
-Première étape du **mot de passe oublié** : envoie un code à 6 chiffres **par SMS, au numéro
-de téléphone du compte**. L'étape suivante est `POST /auth/password/reset/confirm/`.
+Première étape du **mot de passe oublié** : envoie un code à 6 chiffres. L'étape suivante est
+`POST /auth/password/reset/confirm/`.
 
 L'identifiant est le même qu'à la connexion — envoyer **l'un ou l'autre** :
 
-| Compte | Identifiant |
-|---|---|
-| Citoyen (application mobile) | `telephone` |
-| Agent, admin mairie, organisation (application web) | `email` (le code part sur le téléphone du compte) |
+| Compte | Identifiant | Le code arrive… |
+|---|---|---|
+| Citoyen (application mobile) | `telephone` | par **SMS** |
+| Agent, admin mairie, organisation (application web) | `email` | par **e-mail** |
 
 **Règles**
 - La réponse est **toujours la même**, qu'un compte corresponde ou non, pour ne pas révéler
-  qui est inscrit. Aucun SMS n'est envoyé pour un compte inconnu, désactivé, un citoyen dont
+  qui est inscrit. Aucun message n'est envoyé pour un compte inconnu, désactivé, un citoyen dont
   le numéro n'est pas encore vérifié (il doit finir son inscription avec `/auth/otp/resend/`)
   ou un identifiant de la mauvaise méthode (ex. un agent avec son téléphone).
 - Le code expire au bout de 10 minutes ; une nouvelle demande remplace le code précédent.
-- Un agent qui n'a plus accès à son téléphone peut aussi demander à un admin de lui fixer un
-  nouveau mot de passe (`PATCH /agents/{id}/`).
+- Un agent peut aussi demander à un admin de lui fixer un nouveau mot de passe
+  (`PATCH /agents/{id}/`) ; il sera alors **provisoire** (`mot_de_passe_provisoire`).
 
 **Limitation** : 5 demandes de code par heure et par identifiant, sinon `TROP_DE_REQUETES` (429).
 
@@ -333,6 +335,7 @@ L'identifiant est le même qu'à la connexion — envoyer **l'un ou l'autre** :
         request=DemandeReinitialisationSerializer,
         responses={200: enveloppe(), **erreurs(400, 429, 503)},
         examples=[
+            exemple_erreur(CodeErreur.EMAIL_ECHEC, description="Le service d'envoi d'e-mails n'a pas répondu."),
             exemple_requete("Citoyen (téléphone)", {"telephone": "0197123456"}),
             exemple_requete("Mairie ou organisation (e-mail)", {"email": "r.ahouansou@mairie-parakou.bj"}),
             exemple_succes("Demande prise en compte", None, MESSAGE_DEMANDE_REINITIALISATION),
@@ -355,7 +358,7 @@ L'identifiant est le même qu'à la connexion — envoyer **l'un ou l'autre** :
 class ReinitialisationView(VuePublique):
     @extend_schema(
         tags=[TAG_AUTH],
-        summary="Changer de mot de passe avec le code SMS",
+        summary="Changer de mot de passe avec le code reçu",
         description="""
 Deuxième étape du **mot de passe oublié** : contrôle le code reçu après
 `POST /auth/password/reset/` et enregistre le nouveau mot de passe. Envoyer le **même
@@ -366,7 +369,7 @@ identifiant** (`telephone` ou `email`) que pour la demande.
 L'application renvoie l'utilisateur vers `POST /auth/login/` avec le nouveau mot de passe.
 
 **Refus possibles**
-- `VALIDATION_ERREUR` sur `password` : mot de passe trop faible. Le nouveau mot de passe est
+- `VALIDATION_ERREUR` sur `password` : mot de passe trop court (6 caractères minimum). Le nouveau mot de passe est
   contrôlé **avant** le code : le code reste valable, l'utilisateur corrige et renvoie.
 - `OTP_INVALIDE` (400) : code incorrect, avec `details.tentatives_restantes`.
 - `OTP_EXPIRE` (400) : code expiré, déjà utilisé, remplacé, ou aucune demande en cours
@@ -395,8 +398,8 @@ L'application renvoie l'utilisateur vers `POST /auth/login/` avec le nouveau mot
             exemple_erreur(CodeErreur.OTP_EXPIRE),
             exemple_erreur(
                 CodeErreur.VALIDATION_ERREUR,
-                details={"password": ["Ce mot de passe est trop courant."]},
-                nom="Mot de passe trop faible",
+                details={"password": ["Ce mot de passe est trop court. Il doit contenir au minimum 6 caractères."]},
+                nom="Mot de passe trop court",
             ),
             exemple_erreur(CodeErreur.OTP_TENTATIVES_DEPASSEES),
         ],
@@ -410,6 +413,55 @@ L'application renvoie l'utilisateur vers `POST /auth/login/` avec le nouveau mot
             **serializer.identifiant(),
         )
         return reponse_succes(message=MESSAGE_REINITIALISATION)
+
+
+class ChangementMotDePasseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=[TAG_AUTH],
+        summary="Changer son mot de passe",
+        description="""
+La personne connectée choisit un nouveau mot de passe, en donnant l'actuel.
+
+- Le nouveau mot de passe doit respecter les règles habituelles et être **différent** de
+  l'actuel.
+- **Toutes ses autres sessions sont fermées** (autres téléphones, autres navigateurs). La
+  réponse contient de **nouveaux jetons** `access` et `refresh` pour rester connecté sur cet
+  appareil : remplacez ceux que vous aviez.
+- `mot_de_passe_provisoire` repasse à `false`. C'est l'écran à afficher quand il vaut `true`
+  (mot de passe fixé par un administrateur, par exemple à la création d'un compte d'agent ou de
+  membre d'une organisation).
+
+Mot de passe oublié (sans être connecté) : `POST /auth/password/reset/`.
+
+**Connecté** : tous les rôles.
+""",
+        request=ChangementMotDePasseSerializer,
+        responses={200: enveloppe(JetonsSerializer), **erreurs(400, 401)},
+        examples=[
+            exemple_requete(
+                "Changement", {"ancien_mot_de_passe": "Parakou!2026", "nouveau_mot_de_passe": "Nouveau!Pass2026"}
+            ),
+            exemple_succes("Mot de passe modifié", exemples.JETONS, MESSAGE_CHANGEMENT),
+            exemple_erreur(
+                CodeErreur.VALIDATION_ERREUR,
+                details={"ancien_mot_de_passe": ["Mot de passe actuel incorrect."]},
+                nom="Mot de passe actuel incorrect",
+            ),
+            exemple_erreur(
+                CodeErreur.VALIDATION_ERREUR,
+                details={"nouveau_mot_de_passe": ["Ce mot de passe est trop court. Il doit contenir au minimum 6 caractères."]},
+                nom="Nouveau mot de passe trop court",
+            ),
+            *EXEMPLES_AUTH_REQUISE,
+        ],
+    )
+    def post(self, request):
+        entree = ChangementMotDePasseSerializer(data=request.data)
+        entree.is_valid(raise_exception=True)
+        utilisateur = services.changer_mot_de_passe(request.user, **entree.validated_data)
+        return reponse_succes(donnees_jetons(utilisateur), MESSAGE_CHANGEMENT)
 
 
 @extend_schema_view(

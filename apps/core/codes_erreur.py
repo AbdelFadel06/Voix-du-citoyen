@@ -14,6 +14,7 @@ class CodeErreur(models.TextChoices):
     VALIDATION_ERREUR = "VALIDATION_ERREUR"
     NON_AUTHENTIFIE = "NON_AUTHENTIFIE"
     JETON_INVALIDE = "JETON_INVALIDE"
+    CLE_API_INVALIDE = "CLE_API_INVALIDE"
     PERMISSION_REFUSEE = "PERMISSION_REFUSEE"
     RESSOURCE_INTROUVABLE = "RESSOURCE_INTROUVABLE"
     METHODE_NON_AUTORISEE = "METHODE_NON_AUTORISEE"
@@ -35,6 +36,7 @@ class CodeErreur(models.TextChoices):
     OTP_EXPIRE = "OTP_EXPIRE"
     OTP_TENTATIVES_DEPASSEES = "OTP_TENTATIVES_DEPASSEES"
     SMS_ECHEC = "SMS_ECHEC"
+    EMAIL_ECHEC = "EMAIL_ECHEC"
 
     # --- Territoire ---
     COORDONNEES_HORS_COMMUNE = "COORDONNEES_HORS_COMMUNE"
@@ -68,6 +70,7 @@ INFOS_ERREURS = {
     CodeErreur.VALIDATION_ERREUR: (400, "Certaines informations sont invalides."),
     CodeErreur.NON_AUTHENTIFIE: (401, "Vous devez être connecté pour accéder à ce service."),
     CodeErreur.JETON_INVALIDE: (401, "Votre session a expiré. Veuillez vous reconnecter."),
+    CodeErreur.CLE_API_INVALIDE: (401, "Clé d'application invalide ou désactivée."),
     CodeErreur.PERMISSION_REFUSEE: (403, "Vous n'avez pas le droit d'effectuer cette action."),
     CodeErreur.RESSOURCE_INTROUVABLE: (404, "L'élément demandé est introuvable."),
     CodeErreur.METHODE_NON_AUTORISEE: (405, "Cette action n'est pas autorisée ici."),
@@ -104,6 +107,7 @@ INFOS_ERREURS = {
         429,
         "Trop d'essais avec ce code. Demandez-en un nouveau.",
     ),
+    CodeErreur.EMAIL_ECHEC: (503, "L'e-mail n'a pas pu être envoyé. Réessayez dans quelques minutes."),
     CodeErreur.SMS_ECHEC: (
         503,
         "Le SMS n'a pas pu être envoyé. Veuillez réessayer dans quelques instants.",

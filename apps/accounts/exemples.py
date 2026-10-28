@@ -22,6 +22,7 @@ CITOYEN = {
     "organisation": None,
     "service": None,
     "telephone_verifie": True,
+    "mot_de_passe_provisoire": False,
     "date_joined": "2026-10-06T15:58:21+01:00",
 }
 
@@ -106,4 +107,34 @@ ORGANISATION_DETAIL = {
             "taux_resolution": 61.1, "delai_moyen_resolution_jours": 6.5,
         },
     ],
+}
+
+# Gestion des organisations par la mairie.
+REQUETE_ORGANISATION = {
+    "nom": "ONG Eau Pour Tous",
+    "sigle": "EPT",
+    "type": "ONG",
+    "numero_enregistrement": "2019/0457/MISP/DC/SG",
+    "email": "contact@ong-eau.bj",
+    "telephone": "0195000015",
+    "adresse": "Quartier Banikanni, Parakou",
+    "date_expiration": "2027-12-31",
+    "secteurs": [4, 2],
+}
+MEMBRE = {
+    "id": 15,
+    "telephone": "+2290195000015",
+    "nom": "Dossou",
+    "prenoms": "Mireille",
+    "email": "m.dossou@ong-eau.bj",
+    "actif": True,
+    "date_joined": "2026-10-27T10:12:00+01:00",
+    "last_login": None,
+}
+REQUETE_MEMBRE = {
+    "telephone": "0195000015",
+    "nom": "Dossou",
+    "prenoms": "Mireille",
+    "email": "m.dossou@ong-eau.bj",
+    "mot_de_passe": "EauPourTous!2026",
 }

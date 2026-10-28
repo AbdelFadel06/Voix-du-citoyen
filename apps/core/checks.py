@@ -32,6 +32,22 @@ def verifier_backend_push(app_configs, **kwargs):
     return []
 
 
+@register()
+def verifier_backend_email(app_configs, **kwargs):
+    """En production, interdit l'affichage des e-mails dans les journaux : aucun e-mail ne partirait."""
+    if getattr(settings, "EST_PRODUCTION", False) and settings.EMAIL_BACKEND == settings.EMAIL_BACKEND_CONSOLE:
+        return [
+            Error(
+                "EMAIL_BACKEND affiche les e-mails dans les journaux en production : aucun code "
+                "« mot de passe oublié » ne serait envoyé.",
+                hint="Renseignez EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend et les "
+                "variables EMAIL_HOST, EMAIL_PORT, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD.",
+                id="core.E003",
+            )
+        ]
+    return []
+
+
 def bloquer_si_erreurs():
     """
     Lance les checks au démarrage du serveur (gunicorn ne le fait pas, contrairement à

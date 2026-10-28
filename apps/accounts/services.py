@@ -6,6 +6,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import update_last_login
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework_simplejwt.exceptions import TokenError
@@ -42,10 +43,33 @@ def _erreur_telephone_deja_utilise():
 # ---------------------------------------------------------------------------
 
 
+SUJET_EMAIL_REINITIALISATION = "Voix du Citoyen : votre code pour changer de mot de passe"
+MESSAGE_EMAIL_REINITIALISATION = """Bonjour {prenoms},
+
+Votre code pour choisir un nouveau mot de passe Voix du Citoyen est : {code}
+
+Il expire dans {minutes} minutes. Ne le partagez avec personne.
+
+Si vous n'avez pas demandé ce code, ignorez ce message : votre mot de passe reste inchangé.
+
+L'équipe Voix du Citoyen — LE BAROMETRE
+"""
+
+
+def _par_email(utilisateur, motif):
+    """La mairie et les organisations (connexion par e-mail) reçoivent leur code par e-mail."""
+    return (
+        motif == CodeOTP.Motif.REINITIALISATION_MDP
+        and utilisateur.role in Utilisateur.ROLES_CONNEXION_EMAIL
+        and bool(utilisateur.email)
+    )
+
+
 def generer_code_otp(utilisateur, motif):
     """
-    Crée un nouveau code (les précédents non utilisés sont supprimés) et l'envoie par SMS.
-    Le code n'apparaît que dans le SMS : jamais dans les logs ni dans les réponses.
+    Crée un nouveau code (les précédents non utilisés sont supprimés) et l'envoie par SMS, ou
+    par e-mail pour la mairie et les organisations qui changent de mot de passe. Le code
+    n'apparaît que dans le message : jamais dans les logs ni dans les réponses.
     """
     code = f"{secrets.randbelow(10**6):06d}"
     with transaction.atomic():
@@ -56,6 +80,16 @@ def generer_code_otp(utilisateur, motif):
             code_hash=make_password(code),
             expire_le=timezone.now() + timedelta(minutes=CodeOTP.DUREE_VALIDITE_MINUTES),
         )
+    if _par_email(utilisateur, motif):
+        corps = MESSAGE_EMAIL_REINITIALISATION.format(
+            prenoms=utilisateur.prenoms, code=code, minutes=CodeOTP.DUREE_VALIDITE_MINUTES
+        )
+        try:
+            send_mail(SUJET_EMAIL_REINITIALISATION, corps, None, [utilisateur.email])
+        except Exception:  # SMTP indisponible, refus du serveur, délai dépassé…
+            logger.exception("Échec d'envoi de l'e-mail de réinitialisation à l'utilisateur %s", utilisateur.pk)
+            raise ErreurMetier(CodeErreur.EMAIL_ECHEC)
+        return
     message = MESSAGE_SMS_OTP.format(code=code, minutes=CodeOTP.DUREE_VALIDITE_MINUTES)
     try:
         envoyer_sms(utilisateur.telephone, message)
@@ -259,8 +293,9 @@ def _compte_a_reinitialiser(telephone=None, email=None):
 
 def demander_reinitialisation(telephone=None, email=None):
     """
-    Envoie un code par SMS au numéro du compte. Sans effet (et sans le signaler) si aucun
-    compte ne correspond, pour ne pas révéler qui est inscrit.
+    Envoie un code au compte : par SMS pour un citoyen, par e-mail pour la mairie et les
+    organisations. Sans effet (et sans le signaler) si aucun compte ne correspond, pour ne pas
+    révéler qui est inscrit.
     """
     compte = _compte_a_reinitialiser(telephone, email)
     if compte is not None:
@@ -287,11 +322,45 @@ def reinitialiser_mot_de_passe(*, code, password, telephone=None, email=None):
     # Hors transaction : chaque essai raté doit rester compté.
     _verifier_code_otp(compte, CodeOTP.Motif.REINITIALISATION_MDP, code)
     with transaction.atomic():
-        compte.set_password(password)
-        compte.save(update_fields=["password", "maj_le"])
-        for jeton in OutstandingToken.objects.filter(user=compte).exclude(blacklistedtoken__isnull=False):
-            BlacklistedToken.objects.get_or_create(token=jeton)
+        _enregistrer_mot_de_passe_choisi(compte, password)
     return compte
+
+
+def _deconnecter_partout(compte):
+    """Invalide tous les jetons `refresh` du compte (les `access` expirent dans les 30 minutes)."""
+    for jeton in OutstandingToken.objects.filter(user=compte).exclude(blacklistedtoken__isnull=False):
+        BlacklistedToken.objects.get_or_create(token=jeton)
+
+
+def _enregistrer_mot_de_passe_choisi(compte, password):
+    """Mot de passe choisi par la personne elle-même : il n'est plus provisoire."""
+    compte.set_password(password)
+    compte.mot_de_passe_provisoire = False
+    compte.save(update_fields=["password", "mot_de_passe_provisoire", "maj_le"])
+    _deconnecter_partout(compte)
+
+
+@transaction.atomic
+def changer_mot_de_passe(utilisateur, *, ancien_mot_de_passe, nouveau_mot_de_passe):
+    """
+    Changement par la personne connectée. Ferme ses autres sessions ; la vue lui renvoie de
+    nouveaux jetons pour rester connectée sur cet appareil.
+    """
+    if not utilisateur.check_password(ancien_mot_de_passe):
+        raise ErreurMetier(
+            CodeErreur.VALIDATION_ERREUR, details={"ancien_mot_de_passe": ["Mot de passe actuel incorrect."]}
+        )
+    if ancien_mot_de_passe == nouveau_mot_de_passe:
+        raise ErreurMetier(
+            CodeErreur.VALIDATION_ERREUR,
+            details={"nouveau_mot_de_passe": ["Choisissez un mot de passe différent de l'actuel."]},
+        )
+    try:
+        validate_password(nouveau_mot_de_passe, user=utilisateur)
+    except DjangoValidationError as exc:
+        raise ErreurMetier(CodeErreur.VALIDATION_ERREUR, details={"nouveau_mot_de_passe": list(exc.messages)})
+    _enregistrer_mot_de_passe_choisi(utilisateur, nouveau_mot_de_passe)
+    return utilisateur
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +393,106 @@ def rehabiliter_organisation(organisation):
     organisation.statut_habilitation = Organisation.StatutHabilitation.HABILITEE
     organisation.motif_suspension = ""
     organisation.save(update_fields=["statut_habilitation", "motif_suspension", "maj_le"])
+
+
+# ---------------------------------------------------------------------------
+# Organisations gérées par la mairie depuis l'API (application web, plateforme IBDC)
+# ---------------------------------------------------------------------------
+
+
+@transaction.atomic
+def enregistrer_organisation(*, par, communes, secteurs=(), **champs):
+    """
+    Enregistre une organisation pour les `communes` de la mairie. Si son numéro d'enregistrement
+    (facultatif) est déjà connu (organisation créée par une autre mairie), on **ajoute** les
+    communes et secteurs à son périmètre au lieu de créer un doublon. Sans numéro, une nouvelle
+    organisation est toujours créée. Renvoie (organisation, creee).
+    """
+    numero = (champs.get("numero_enregistrement") or "").strip() or None
+    existante = None
+    if numero:
+        existante = Organisation.objects.select_for_update().filter(numero_enregistrement__iexact=numero).first()
+    if existante is not None:
+        existante.communes.add(*communes)
+        existante.secteurs.add(*secteurs)
+        return existante, False
+    champs["numero_enregistrement"] = numero
+    organisation = creer_organisation(Organisation(**champs), par)
+    organisation.communes.set(communes)
+    organisation.secteurs.set(secteurs)
+    return organisation, True
+
+
+@transaction.atomic
+def modifier_organisation(organisation, **changements):
+    """Modification partielle des informations ; `secteurs` remplace la liste."""
+    secteurs = changements.pop("secteurs", None)
+    if "numero_enregistrement" in changements:
+        numero = (changements["numero_enregistrement"] or "").strip() or None
+        changements["numero_enregistrement"] = numero
+        if numero and Organisation.objects.filter(numero_enregistrement__iexact=numero).exclude(pk=organisation.pk).exists():
+            raise ErreurMetier(
+                CodeErreur.CONFLIT,
+                "Une autre organisation porte déjà ce numéro d'enregistrement.",
+                details={"numero_enregistrement": ["Une autre organisation porte déjà ce numéro."]},
+            )
+    for champ, valeur in changements.items():
+        setattr(organisation, champ, valeur)
+    organisation.save()
+    if secteurs is not None:
+        organisation.secteurs.set(secteurs)
+    return organisation
+
+
+def retirer_commune(organisation, commune):
+    """
+    Retire une commune du périmètre de l'organisation : elle n'y voit plus aucun signalement.
+    Les dossiers dont elle était déjà en charge dans cette commune restent à son nom ; la
+    mairie peut les confier à une autre organisation (`/affecter-organisation/`).
+    """
+    organisation.communes.remove(commune)
+    return organisation
+
+
+@transaction.atomic
+def creer_membre(organisation, *, telephone, nom, prenoms, email, mot_de_passe):
+    """Compte d'un membre de l'organisation : connexion par e-mail, sans code SMS."""
+    if Utilisateur.objects.filter(telephone=telephone).exists():
+        raise _erreur_telephone_deja_utilise()
+    controler_email_disponible(email)
+    return Utilisateur.objects.create_user(
+        telephone,
+        password=mot_de_passe,
+        nom=nom,
+        prenoms=prenoms,
+        email=email,
+        role=Role.ORGANISATION,
+        organisation=organisation,
+        telephone_verifie=True,
+        mot_de_passe_provisoire=True,
+    )
+
+
+@transaction.atomic
+def modifier_membre(membre, *, mot_de_passe=None, **changements):
+    actif = changements.pop("actif", None)
+    if "email" in changements:
+        changements["email"] = normaliser_email(changements["email"])
+        if not changements["email"]:
+            raise ErreurMetier(
+                CodeErreur.VALIDATION_ERREUR,
+                details={"email": ["L'adresse e-mail est obligatoire : elle sert à se connecter."]},
+            )
+        controler_email_disponible(changements["email"], sauf=membre)
+    for champ, valeur in changements.items():
+        setattr(membre, champ, valeur)
+    if actif is not None:
+        membre.is_active = actif
+    if mot_de_passe:
+        membre.set_password(mot_de_passe)
+        membre.mot_de_passe_provisoire = True
+    membre.save()
+    return membre
 
 
 # ---------------------------------------------------------------------------
@@ -420,6 +589,7 @@ def creer_agent(*, telephone, nom, prenoms, role, mot_de_passe, email, commune, 
         role=role,
         service=service,
         commune=commune,
+        mot_de_passe_provisoire=True,
     )
 
 
@@ -447,5 +617,6 @@ def modifier_agent(agent, *, par, mot_de_passe=None, **changements):
     _controler_agent(agent.role, agent.service, agent.commune)
     if mot_de_passe:
         agent.set_password(mot_de_passe)
+        agent.mot_de_passe_provisoire = agent.pk != par.pk  # fixé par un autre admin : à renouveler
     agent.save()
     return agent

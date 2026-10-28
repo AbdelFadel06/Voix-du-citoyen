@@ -45,6 +45,15 @@ class EstAdminMairie(BasePermission):
         return _a_le_role(request.user, Role.ADMIN_MAIRIE)
 
 
+class EstAdminPlateforme(BasePermission):
+    """Admin mairie sans commune : gère toutes les communes (ex. suspendre une organisation partout)."""
+
+    message = "Action réservée à l'administrateur de la plateforme."
+
+    def has_permission(self, request, view):
+        return _a_le_role(request.user, Role.ADMIN_MAIRIE) and request.user.commune_id is None
+
+
 class EstCitoyenOuMairie(BasePermission):
     """Tout sauf les organisations (ex. suggestions, réservées aux citoyens et à la mairie)."""
 

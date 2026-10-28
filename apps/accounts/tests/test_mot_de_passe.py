@@ -1,4 +1,7 @@
+import re
+
 import pytest
+from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 
@@ -75,7 +78,7 @@ class TestCitoyen:
     def test_mot_de_passe_faible_ne_consomme_pas_le_code(self, api_client, sms, citoyen):
         demander(api_client, telephone="0197123456")
         code = sms.dernier_code()
-        erreur = confirmer(api_client, code, password="12345678", telephone="0197123456").json()["erreur"]
+        erreur = confirmer(api_client, code, password="12345", telephone="0197123456").json()["erreur"]
         assert erreur["code"] == CodeErreur.VALIDATION_ERREUR and "password" in erreur["details"]
         assert confirmer(api_client, code, telephone="0197123456").status_code == 200
 
@@ -115,12 +118,39 @@ class TestSansRevelerLesComptes:
         assert "identifiant" in reponse.json()["erreur"]["details"]
 
 
-class TestMairie:
-    def test_par_email(self, api_client, sms, agent):
+def code_dans(email):
+    return re.search(r"\b(\d{6})\b", email.body).group(1)
+
+
+class TestMairieEtOrganisations:
+    """Comptes connectés par e-mail : le code arrive par e-mail, pas par SMS."""
+
+    def test_agent(self, api_client, sms, agent):
         demander(api_client, email="R.Ahouansou@mairie-parakou.bj")
-        assert sms[0].telephone == agent.telephone
-        assert confirmer(api_client, sms.dernier_code(), email="r.ahouansou@mairie-parakou.bj").status_code == 200
+        assert len(sms) == 0 and len(mail.outbox) == 1
+        message = mail.outbox[0]
+        assert message.to == [agent.email] and "mot de passe" in message.subject
+        assert confirmer(api_client, code_dans(message), email="r.ahouansou@mairie-parakou.bj").status_code == 200
         assert api_client.post(URL_LOGIN, {"email": agent.email, "password": NOUVEAU}, format="json").status_code == 200
+
+    def test_membre_d_une_organisation(self, api_client, sms, creer_utilisateur):
+        membre = creer_utilisateur(role=Utilisateur.Role.ORGANISATION, email="m.dossou@ong-eau.bj")
+        demander(api_client, email="m.dossou@ong-eau.bj")
+        assert mail.outbox[0].to == ["m.dossou@ong-eau.bj"] and len(sms) == 0
+        membre.refresh_from_db()
+        assert confirmer(api_client, code_dans(mail.outbox[0]), email="m.dossou@ong-eau.bj").status_code == 200
+
+    def test_echec_d_envoi(self, api_client, agent, monkeypatch):
+        def en_panne(*args, **kwargs):
+            raise OSError("serveur SMTP injoignable")
+
+        monkeypatch.setattr("apps.accounts.services.send_mail", en_panne)
+        reponse = api_client.post(URL_DEMANDE, {"email": agent.email}, format="json")
+        assert reponse.status_code == 503 and reponse.json()["erreur"]["code"] == CodeErreur.EMAIL_ECHEC
+
+    def test_le_code_n_apparait_que_dans_l_email(self, api_client, agent):
+        reponse = demander(api_client, email=agent.email)
+        assert code_dans(mail.outbox[0]) not in str(reponse.json())
 
 
 class TestLimitation:
