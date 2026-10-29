@@ -112,10 +112,14 @@ class TestSynthese:
         }
 
     def test_une_organisation_ne_voit_ni_brouillons_ni_suggestions(self, organisation):
-        donnees = lire(organisation, "synthese")
+        recapitulatif = lire(organisation, "synthese")
+        assert set(recapitulatif) == {"globales", "par_secteur", "par_quartier"}
+        donnees = recapitulatif["globales"]
         assert "suggestions" not in donnees
         assert "brouillons" not in donnees["realisations"]
         assert donnees["realisations"]["total"] == 1 and donnees["realisations"]["budget_total"] == 1000000
+        for ligne in recapitulatif["par_secteur"] + recapitulatif["par_quartier"]:
+            assert "suggestions" not in ligne
 
     def test_filtres(self, mairie, donnees):
         assert lire(mairie, "synthese", secteur=donnees["eclairage"].pk)["globales"]["signalements"]["total"] == 1
@@ -124,6 +128,36 @@ class TestSynthese:
         vide = lire(mairie, "synthese", date_debut=demain)["globales"]
         assert vide["signalements"]["total"] == 0 and vide["signalements"]["taux_resolution"] is None
         assert vide["realisations"]["taux_avancement_moyen"] is None
+
+    def test_plusieurs_secteurs_et_quartiers(self, mairie, donnees):
+        ids_secteurs = [donnees["voirie"].pk, donnees["eclairage"].pk]
+        ids_quartiers = [donnees["togoudo"].pk, donnees["cococodji"].pk]
+        # Paramètre répété ou valeurs séparées par des virgules : même résultat.
+        for secteur in (ids_secteurs, ",".join(map(str, ids_secteurs))):
+            recapitulatif = lire(mairie, "synthese", secteur=secteur)
+            assert recapitulatif["globales"]["signalements"]["total"] == 4
+            assert {l["secteur"]["code"] for l in recapitulatif["par_secteur"]} == {"VOIRIE", "ECLAIRAGE"}
+        for quartier in (ids_quartiers, f"{ids_quartiers[0]}, {ids_quartiers[1]}"):
+            assert lire(mairie, "synthese", quartier=quartier)["globales"]["signalements"]["total"] == 4
+        # Les deux filtres se combinent : Éclairage à Togoudo n'a aucun dossier.
+        croise = lire(mairie, "synthese", secteur=donnees["eclairage"].pk, quartier=donnees["togoudo"].pk)
+        assert croise["globales"]["signalements"]["total"] == 0
+        assert [l["secteur"]["code"] for l in croise["par_secteur"]] == ["ECLAIRAGE"]
+
+    @pytest.mark.parametrize("valeur", ["999999", "1,abc"])
+    def test_identifiant_inconnu_ou_invalide(self, mairie, donnees, valeur):
+        reponse = mairie.get(URLS["synthese"], {"secteur": valeur})
+        assert reponse.status_code == 400 and "secteur" in reponse.json()["erreur"]["details"]
+
+    def test_routes_generales_meme_recapitulatif(self, donnees, creer_utilisateur, client_connecte):
+        plateforme = client_connecte(creer_utilisateur(role=Utilisateur.Role.ADMIN_MAIRIE, commune=None))
+        reponse = plateforme.get("/api/v1/dashboard/synthese/", {"secteur": f"{donnees['voirie'].pk},{donnees['eclairage'].pk}"})
+        recapitulatif = reponse.json()["donnees"]
+        assert set(recapitulatif) == {"globales", "par_secteur", "par_quartier"}
+        assert recapitulatif["globales"]["signalements"]["total"] == 4
+        # Les autres tableaux acceptent aussi plusieurs valeurs.
+        for nom in ("par-secteur", "par-quartier", "evolution", "carte"):
+            assert plateforme.get(URLS[nom], {"quartier": [donnees["togoudo"].pk, donnees["cococodji"].pk]}).status_code == 200
 
     def test_dates_incoherentes(self, mairie):
         reponse = mairie.get(URLS["synthese"], {"date_debut": "2026-10-10", "date_fin": "2026-10-01"})

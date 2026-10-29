@@ -72,7 +72,9 @@ la plateforme (compte mairie sans commune) y restent, et sont refusés dans l'es
 L'authentification (`/auth/…`), les médias et les notifications sont communs à tous.
 
 `GET /api/v1/mairie/dashboard/synthese/` donne en un seul appel le récapitulatif complet de la
-commune : chiffres globaux, par secteur et par quartier.
+commune : chiffres globaux, par secteur et par quartier (même format sur `/api/v1/dashboard/synthese/`
+pour les organisations et l'admin de la plateforme). Dans tous les tableaux de bord, `secteur` et
+`quartier` acceptent plusieurs identifiants : `secteur=1&secteur=3` ou `secteur=1,3`.
 
 | Volet | Adresses (`/api/v1/mairie/…`) |
 |---|---|

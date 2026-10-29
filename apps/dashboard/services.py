@@ -43,9 +43,9 @@ def _filtrer(queryset, filtres, champ_quartier):
     if filtres.get("date_fin"):
         queryset = queryset.filter(cree_le__date__lte=filtres["date_fin"])
     if filtres.get("secteur"):
-        queryset = queryset.filter(secteur=filtres["secteur"])
+        queryset = queryset.filter(secteur__in=filtres["secteur"])
     if filtres.get("quartier"):
-        queryset = queryset.filter(**{champ_quartier: filtres["quartier"]})
+        queryset = queryset.filter(**{f"{champ_quartier}__in": filtres["quartier"]})
     return queryset
 
 
@@ -147,7 +147,7 @@ def par_secteur(filtres, mairie):
     secteurs = Secteur.objects.filter(Q(actif=True) | Q(pk__in=set(totaux) | set(idees) | set(travaux)))
     secteurs = limiter_aux_secteurs(secteurs, filtres.get("secteurs_autorises"), champ="pk")
     if filtres.get("secteur"):
-        secteurs = secteurs.filter(pk=filtres["secteur"].pk)
+        secteurs = secteurs.filter(pk__in=[s.pk for s in filtres["secteur"]])
     lignes = [
         {
             "secteur": {"id": s.pk, "nom": s.nom, "code": s.code, "couleur": s.couleur},

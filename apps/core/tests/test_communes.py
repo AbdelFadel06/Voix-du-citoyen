@@ -184,8 +184,8 @@ class TestSuggestionsEtTableaux:
         mairie = client_connecte(agent_de(parakou)).get(url, {"commune": cotonou.pk}).json()["donnees"]
         assert mairie["globales"]["signalements"]["total"] == 1
         ong = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION))
-        assert ong.get(url).json()["donnees"]["signalements"]["total"] == 3
-        assert ong.get(url, {"commune": cotonou.pk}).json()["donnees"]["signalements"]["total"] == 2
+        assert ong.get(url).json()["donnees"]["globales"]["signalements"]["total"] == 3
+        assert ong.get(url, {"commune": cotonou.pk}).json()["donnees"]["globales"]["signalements"]["total"] == 2
 
 
 class TestAdministration:
@@ -249,7 +249,7 @@ class TestSecteursDesOrganisations:
         ong = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION, secteurs=[eau]))
         assert [d["id"] for d in ong.get(URL_SIGNALEMENTS).json()["donnees"]] == [fuite.pk]
         assert ong.get(reverse("signalements:signalement-detail", args=[route.pk])).status_code == 404
-        assert ong.get(reverse("dashboard:synthese")).json()["donnees"]["signalements"]["total"] == 1
+        assert ong.get(reverse("dashboard:synthese")).json()["donnees"]["globales"]["signalements"]["total"] == 1
         lignes = ong.get(reverse("dashboard:par-secteur")).json()["donnees"]
         assert [l["secteur"]["code"] for l in lignes] == ["EAU"] and "suggestions" not in lignes[0]
 
@@ -271,7 +271,7 @@ class TestCommunesDesOrganisations:
         # ?commune= ne permet pas d'en sortir.
         assert ong.get(URL_SIGNALEMENTS, {"commune": cotonou.pk}).json()["donnees"] == []
         assert ong.get(reverse("signalements:signalement-detail", args=[a_cotonou.pk])).status_code == 404
-        assert ong.get(reverse("dashboard:synthese")).json()["donnees"]["signalements"]["total"] == 1
+        assert ong.get(reverse("dashboard:synthese")).json()["donnees"]["globales"]["signalements"]["total"] == 1
         organisation = ong.get(reverse("accounts:me")).json()["donnees"]["organisation"]
         assert organisation["communes"] == [{"id": parakou.pk, "nom": "Parakou"}]
         assert [s["code"] for s in organisation["secteurs"]] == ["VOIRIE"]
@@ -287,4 +287,4 @@ class TestCommunesDesOrganisations:
         signaler(creer_utilisateur(commune=parakou))
         ong = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION, communes=[], secteurs=[secteur]))
         assert ong.get(URL_SIGNALEMENTS).json()["donnees"] == []
-        assert ong.get(reverse("dashboard:synthese")).json()["donnees"]["signalements"]["total"] == 0
+        assert ong.get(reverse("dashboard:synthese")).json()["donnees"]["globales"]["signalements"]["total"] == 0

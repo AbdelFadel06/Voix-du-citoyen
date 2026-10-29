@@ -1,6 +1,7 @@
 """Paramètres et formats de réponse des tableaux de bord (documentation incluse)."""
 
 from rest_framework import serializers
+from rest_framework.fields import empty
 
 from apps.referentiel.models import Secteur
 from apps.signalements.models import Signalement
@@ -15,6 +16,28 @@ MAX_POINTS_EVOLUTION = 400
 # ---------------------------------------------------------------------------
 
 
+class ListeIdentifiants(serializers.ManyRelatedField):
+    """Un ou plusieurs identifiants : `?secteur=1&secteur=3` ou `?secteur=1,3`."""
+
+    def get_value(self, dictionary):
+        if self.field_name not in dictionary:
+            return empty
+        valeur = super().get_value(dictionary)
+        valeurs = valeur if isinstance(valeur, (list, tuple)) else [valeur]
+        return [morceau.strip() for v in valeurs for morceau in str(v).split(",") if morceau.strip()]
+
+
+def liste_identifiants(queryset, introuvable, help_text):
+    return ListeIdentifiants(
+        child_relation=serializers.PrimaryKeyRelatedField(
+            queryset=queryset,
+            error_messages={"does_not_exist": introuvable, "incorrect_type": "Identifiant invalide : un nombre est attendu."},
+        ),
+        required=False,
+        help_text=help_text,
+    )
+
+
 class FiltresSerializer(serializers.Serializer):
     commune = serializers.PrimaryKeyRelatedField(
         queryset=Commune.objects.all(),
@@ -25,17 +48,15 @@ class FiltresSerializer(serializers.Serializer):
     )
     date_debut = serializers.DateField(required=False, help_text="Dossiers créés à partir de ce jour (AAAA-MM-JJ).")
     date_fin = serializers.DateField(required=False, help_text="Dossiers créés jusqu'à ce jour inclus (AAAA-MM-JJ).")
-    secteur = serializers.PrimaryKeyRelatedField(
-        queryset=Secteur.objects.all(),
-        required=False,
-        error_messages={"does_not_exist": "Ce secteur n'existe pas."},
-        help_text="Limiter à un secteur (identifiant).",
+    secteur = liste_identifiants(
+        Secteur.objects.all(),
+        "Ce secteur n'existe pas.",
+        "Limiter à un ou plusieurs secteurs (identifiants) : `secteur=1&secteur=3` ou `secteur=1,3`.",
     )
-    quartier = serializers.PrimaryKeyRelatedField(
-        queryset=Quartier.objects.all(),
-        required=False,
-        error_messages={"does_not_exist": "Ce quartier n'existe pas."},
-        help_text="Limiter à un quartier (identifiant).",
+    quartier = liste_identifiants(
+        Quartier.objects.all(),
+        "Ce quartier n'existe pas.",
+        "Limiter à un ou plusieurs quartiers (identifiants) : `quartier=12&quartier=15` ou `quartier=12,15`.",
     )
 
     def validate(self, attrs):
@@ -50,6 +71,15 @@ class FiltresQuartierSerializer(FiltresSerializer):
         required=False,
         error_messages={"does_not_exist": "Cet arrondissement n'existe pas."},
         help_text="Limiter aux quartiers d'un arrondissement (identifiant).",
+    )
+
+
+class FiltresSyntheseSerializer(FiltresSerializer):
+    arrondissement = serializers.PrimaryKeyRelatedField(
+        queryset=Arrondissement.objects.all(),
+        required=False,
+        error_messages={"does_not_exist": "Cet arrondissement n'existe pas."},
+        help_text="Limiter le tableau par quartier aux quartiers d'un arrondissement (identifiant).",
     )
 
 
@@ -82,14 +112,8 @@ class FiltresCarteSerializer(FiltresSerializer):
 # Espace mairie : la commune vient du compte, aucun paramètre `commune`.
 
 
-class FiltresSyntheseMairieSerializer(FiltresQuartierSerializer):
+class FiltresSyntheseMairieSerializer(FiltresSyntheseSerializer):
     commune = None
-    arrondissement = serializers.PrimaryKeyRelatedField(
-        queryset=Arrondissement.objects.all(),
-        required=False,
-        error_messages={"does_not_exist": "Cet arrondissement n'existe pas."},
-        help_text="Limiter le tableau par quartier aux quartiers d'un arrondissement (identifiant).",
-    )
 
 
 class FiltresEvolutionMairieSerializer(FiltresEvolutionSerializer):

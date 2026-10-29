@@ -85,3 +85,10 @@ SYNTHESE_COMPLETE = {
     "par_secteur": PAR_SECTEUR,
     "par_quartier": PAR_QUARTIER,
 }
+
+_SANS_SUGGESTIONS = ("suggestions",)
+SYNTHESE_COMPLETE_ORGANISATION = {
+    "globales": SYNTHESE_ORGANISATION,
+    "par_secteur": [{k: v for k, v in ligne.items() if k not in _SANS_SUGGESTIONS} for ligne in PAR_SECTEUR],
+    "par_quartier": [{k: v for k, v in ligne.items() if k not in _SANS_SUGGESTIONS} for ligne in PAR_QUARTIER],
+}

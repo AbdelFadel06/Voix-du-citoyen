@@ -119,6 +119,9 @@ ni service chez nous. Le nom de l'agent qui agit est transmis par `X-Agent`.
 ## 2. Page « Tableau de bord » (statistiques)
 
 Filtres communs : `date_debut`, `date_fin` (date d'envoi des dossiers), `secteur`, `quartier`.
+`secteur` et `quartier` acceptent **un ou plusieurs identifiants**, au choix en répétant le
+paramètre (`secteur=1&secteur=3`) ou séparés par des virgules (`secteur=1,3`) ; combinés, ils se
+croisent (ex. voirie **et** éclairage, à Banikanni **ou** Zongo).
 Tous les chiffres sont ceux de la commune de la clé (aucun paramètre `commune`).
 
 | Bloc de la page | Appel | Contenu |
@@ -144,6 +147,7 @@ Exemple :
 
 ```http
 GET /api/v1/mairie/dashboard/synthese/?date_debut=2026-10-01&date_fin=2026-10-31
+GET /api/v1/mairie/dashboard/synthese/?secteur=1,3&quartier=12,15     → deux secteurs, deux quartiers
 ```
 
 ```json

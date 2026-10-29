@@ -21,6 +21,7 @@ from .serializers import (
     FiltresQuartierSerializer,
     FiltresSerializer,
     FiltresSyntheseMairieSerializer,
+    FiltresSyntheseSerializer,
     LigneQuartierSerializer,
     LigneSecteurSerializer,
     SyntheseCompleteSerializer,
@@ -32,7 +33,8 @@ ACCES = """
 ou une seule avec `?commune=<id>`. La mairie d'une commune utilise l'espace mairie
 (`/api/v1/mairie/dashboard/…`) : ici, elle reçoit `ESPACE_MAIRIE_REQUIS`.
 
-**Filtres communs** : `date_debut`, `date_fin` (date de création des dossiers), `secteur`, `quartier`.
+**Filtres communs** : `date_debut`, `date_fin` (date de création des dossiers), `secteur`, `quartier`
+(un ou plusieurs : `secteur=1&secteur=3` ou `secteur=1,3`).
 
 **Connecté** : organisations habilitées et admin de la plateforme. Les organisations ne voient
 que les **signalements de leurs communes et secteurs d'intervention**, **aucune suggestion** (les champs
@@ -74,28 +76,49 @@ class VueTableau(APIView):
         return est_personnel_mairie(self.request.user)
 
 
-class SyntheseView(VueTableau):
+class RecapitulatifMixin:
+    """Récapitulatif complet : chiffres globaux, par secteur et par quartier, mêmes filtres."""
+
+    def recapitulatif(self, request):
+        filtres = self.filtres(request)
+        arrondissement = filtres.pop("arrondissement", None)
+        donnees = {
+            "globales": services.synthese(filtres, self.mairie),
+            "par_secteur": services.par_secteur(filtres, self.mairie),
+            "par_quartier": services.par_quartier(filtres, self.mairie, arrondissement),
+        }
+        return reponse_succes(SyntheseCompleteSerializer(donnees).data)
+
+
+class SyntheseView(RecapitulatifMixin, VueTableau):
+    filtres_class = FiltresSyntheseSerializer
+
     @extend_schema(
         tags=[TAG_TABLEAUX_DE_BORD],
-        summary="Chiffres clés",
+        summary="Récapitulatif complet",
         description=f"""
-Vue d'ensemble : signalements (total, répartition par statut, dossiers ouverts, taux de
-résolution, délai moyen de résolution en jours), suggestions (nombre, soutiens) et
-réalisations (répartition par statut, budget total en FCFA, avancement moyen).
+Tout le récapitulatif en un seul appel :
 
-Pour la mairie seulement : `suggestions.pertinentes` et `realisations.brouillons`.
+1. `globales` : chiffres clés — signalements (total, par statut, ouverts, taux et délai moyen
+   de résolution en jours), suggestions (nombre, soutiens) et réalisations (par statut, budget
+   total en FCFA, avancement moyen) ;
+2. `par_secteur` : une ligne par secteur (signalements, ouverts, résolus, taux de résolution,
+   suggestions, réalisations), du plus grand nombre de signalements au plus petit ;
+3. `par_quartier` : une ligne par quartier ayant au moins un dossier, mêmes colonnes.
+
+Les filtres s'appliquent aux trois blocs ; `arrondissement` ne limite que `par_quartier`.
+Pour l'admin de la plateforme seulement : `suggestions.pertinentes` et `realisations.brouillons`.
 {ACCES}""",
-        parameters=[FiltresSerializer],
-        responses={200: enveloppe(SyntheseSerializer), **erreurs(400, 401, 403)},
+        parameters=[FiltresSyntheseSerializer],
+        responses={200: enveloppe(SyntheseCompleteSerializer), **erreurs(400, 401, 403)},
         examples=[
-            exemple_succes("Vue par la mairie", exemples.SYNTHESE_MAIRIE),
-            exemple_succes("Vue par une organisation", exemples.SYNTHESE_ORGANISATION),
+            exemple_succes("Vue par l'admin de la plateforme", exemples.SYNTHESE_COMPLETE),
+            exemple_succes("Vue par une organisation", exemples.SYNTHESE_COMPLETE_ORGANISATION),
             *EXEMPLES_ERREURS,
         ],
     )
     def get(self, request):
-        donnees = services.synthese(self.filtres(request), self.mairie)
-        return reponse_succes(SyntheseSerializer(donnees).data)
+        return self.recapitulatif(request)
 
 
 class ParSecteurView(VueTableau):
@@ -205,7 +228,8 @@ Filtre supplémentaire : `statut` (signalements).
 ACCES_MAIRIE = """
 **Commune** : toujours celle de la clé d'API ; aucun paramètre `commune`.
 
-**Filtres** : `date_debut`, `date_fin` (date de création des dossiers), `secteur`, `quartier`.
+**Filtres** : `date_debut`, `date_fin` (date de création des dossiers), `secteur`, `quartier`
+(un ou plusieurs : `secteur=1&secteur=3` ou `secteur=1,3`).
 
 **Connecté** : clé d'API d'une institution (plateforme IBDC des mairies) uniquement. Tout
 jeton de connexion, même d'un agent ou admin mairie, reçoit `PERMISSION_REFUSEE`.
@@ -225,7 +249,7 @@ class VueTableauMairie(VueTableau):
     permission_classes = [EspaceMairie]
 
 
-class SyntheseCompleteView(VueTableauMairie):
+class SyntheseCompleteView(RecapitulatifMixin, VueTableauMairie):
     filtres_class = FiltresSyntheseMairieSerializer
 
     @extend_schema(
@@ -241,7 +265,8 @@ Tout le récapitulatif de la commune en un seul appel :
    suggestions, réalisations), du plus grand nombre de signalements au plus petit ;
 3. `par_quartier` : une ligne par quartier ayant au moins un dossier, mêmes colonnes.
 
-Les filtres s'appliquent aux trois blocs ; `arrondissement` ne limite que `par_quartier`.
+Les filtres s'appliquent aux trois blocs ; `secteur` et `quartier` acceptent plusieurs valeurs
+(`secteur=1&secteur=3` ou `secteur=1,3`) ; `arrondissement` ne limite que `par_quartier`.
 L'évolution dans le temps et la carte restent à part (`/mairie/dashboard/evolution/`,
 `/mairie/dashboard/carte/`), car plus lourdes.
 {ACCES_MAIRIE}""",
@@ -250,14 +275,7 @@ L'évolution dans le temps et la carte restent à part (`/mairie/dashboard/evolu
         examples=[exemple_succes("Récapitulatif", exemples.SYNTHESE_COMPLETE), *EXEMPLES_ERREURS_MAIRIE],
     )
     def get(self, request):
-        filtres = self.filtres(request)
-        arrondissement = filtres.pop("arrondissement", None)
-        donnees = {
-            "globales": services.synthese(filtres, True),
-            "par_secteur": services.par_secteur(filtres, True),
-            "par_quartier": services.par_quartier(filtres, True, arrondissement),
-        }
-        return reponse_succes(SyntheseCompleteSerializer(donnees).data)
+        return self.recapitulatif(request)
 
 
 class EvolutionMairieView(VueTableauMairie, EvolutionView):
