@@ -231,9 +231,10 @@ créer les éléments un par un (`POST /api/v1/secteurs/`, `/quartiers/`, `/serv
 
 ### 3.4 Espace mairie (`/api/v1/mairie/…`)
 
-Une mairie (clé IBDC) n'utilise que les adresses préfixées par `/api/v1/mairie/` ; sa commune
-vient de la clé, jamais d'un paramètre. Sur les autres adresses, elle reçoit
-`403 ESPACE_MAIRIE_REQUIS`.
+**Seule la plateforme IBDC y a accès, avec la clé d'API de la mairie** (`X-Api-Key`) : un compte
+connecté par mot de passe (jeton), même agent ou admin mairie, y reçoit `403 PERMISSION_REFUSEE`.
+La commune vient de la clé, jamais d'un paramètre. Avec la clé, les adresses sans `/mairie/`
+répondent `403 ESPACE_MAIRIE_REQUIS`.
 
 | Volet | Adresses (`/api/v1/mairie/…`) |
 |---|---|

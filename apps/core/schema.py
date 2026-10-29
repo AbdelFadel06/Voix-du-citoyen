@@ -96,8 +96,8 @@ TAGS = [
     {"name": TAG_SYSTEME, "description": "Supervision technique de l'API."},
 ]
 
-# Espace mairie (/api/v1/mairie/…) : mêmes groupes, préfixés, pour les agents et admins d'une
-# commune et les institutions IBDC. La commune vient toujours du jeton ou de la clé.
+# Espace mairie (/api/v1/mairie/…) : mêmes groupes, préfixés, réservés aux clés d'API des
+# institutions IBDC. La commune vient toujours de la clé.
 PREFIXE_MAIRIE = "/api/v1/mairie/"
 GROUPES_MAIRIE = [TAG_TABLEAUX_DE_BORD, TAG_SIGNALEMENTS, TAG_SUGGESTIONS, TAG_REALISATIONS,
                   TAG_SECTEURS, TAG_TERRITOIRE, TAG_ADMINISTRATION]
@@ -110,8 +110,8 @@ def tag_mairie(tag):
 TAGS += [
     {
         "name": tag_mairie(tag),
-        "description": f"**Espace mairie** ({tag.lower()}) : agents et admins d'une commune, institutions "
-        "IBDC. La commune est celle du compte (jeton ou clé d'API), jamais un paramètre.",
+        "description": f"**Espace mairie** ({tag.lower()}) : réservé à la plateforme IBDC des mairies, par la clé "
+        "d'API de la mairie (jamais un jeton de connexion). La commune est celle de la clé, jamais un paramètre.",
     }
     for tag in GROUPES_MAIRIE
 ]
@@ -308,7 +308,7 @@ def completer_documentation(result, generator, request, public):
             if isinstance(operation, dict) and "tags" in operation:
                 operation["tags"] = [tag_mairie(tag) for tag in operation["tags"]]
                 # Jamais public dans l'espace mairie (même la liste des réalisations).
-                operation["security"] = [{"jwtAuth": []}, {"cleApi": []}]
+                operation["security"] = [{"cleApi": []}]
     return result
 
 

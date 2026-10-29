@@ -1,9 +1,10 @@
 """
 Espaces d'adresses de l'API.
 
-- **Espace mairie** (`/api/v1/mairie/…`) : réservé aux agents et admins d'une mairie (et aux
-  institutions IBDC, dont le compte technique est un admin mairie). Leur commune vient
-  toujours du jeton ou de la clé : aucun paramètre `commune` n'y est proposé.
+- **Espace mairie** (`/api/v1/mairie/…`) : réservé aux institutions IBDC, par leur clé d'API
+  (compte technique = admin mairie de sa commune). Un jeton de connexion, même d'un agent ou
+  admin mairie, y est refusé. La commune vient toujours de la clé : aucun paramètre `commune`
+  n'y est proposé.
 - **Routes générales** (`/api/v1/…`) : citoyens, organisations et admin de la plateforme
   (compte mairie sans commune). La mairie d'une commune y est refusée
   (`ESPACE_MAIRIE_REQUIS`) pour les volets qui ont leur équivalent dans l'espace mairie.
@@ -31,11 +32,17 @@ def est_mairie_de_commune(utilisateur):
     )
 
 
+def par_cle_d_institution(request):
+    from apps.interop.models import Institution
+
+    return isinstance(request.auth, Institution)
+
+
 class EspaceMairie(BasePermission):
-    message = "Espace réservé aux agents et administrateurs d'une mairie."
+    message = "Espace réservé à la plateforme des mairies (IBDC), avec la clé d'API de la mairie."
 
     def has_permission(self, request, view):
-        return est_mairie_de_commune(request.user)
+        return par_cle_d_institution(request) and est_mairie_de_commune(request.user)
 
 
 class HorsEspaceMairie(BasePermission):

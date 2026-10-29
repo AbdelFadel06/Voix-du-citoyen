@@ -7,6 +7,8 @@ from rest_framework.test import APIClient
 from apps.accounts import services
 from apps.accounts.models import Utilisateur
 from apps.core.codes_erreur import CodeErreur
+from apps.interop import services as interop
+from conftest import commune_de_test
 
 pytestmark = pytest.mark.django_db
 
@@ -29,27 +31,55 @@ def agent(creer_utilisateur):
     return creer_utilisateur(role=Utilisateur.Role.AGENT)
 
 
-class TestMairieDeCommune:
+@pytest.fixture
+def ibdc():
+    """Client de la plateforme IBDC : clé d'API d'une institution (mairie de la commune de test)."""
+    _, cle = interop.creer_institution(
+        id_externe="74", nom="Mairie de test", commune=commune_de_test(),
+        email="info@piebarometre.com", telephone="+2290169494072",
+    )
+    client = APIClient()
+    client.credentials(HTTP_X_API_KEY=cle)
+    return client
+
+
+class TestCleIBDC:
     @pytest.mark.parametrize("volet", VOLETS)
-    def test_refusee_sur_les_routes_generales(self, agent, volet):
-        reponse = client_brut(agent).get(f"/api/v1/{volet}")
+    def test_refusee_sur_les_routes_generales(self, ibdc, volet):
+        reponse = ibdc.get(f"/api/v1/{volet}")
         assert reponse.status_code == 403 and reponse.json()["erreur"]["code"] == CodeErreur.ESPACE_MAIRIE_REQUIS
 
     @pytest.mark.parametrize("volet", VOLETS + ["dashboard/evolution/", "dashboard/carte/"])
-    def test_acceptee_dans_l_espace_mairie(self, agent, volet):
-        assert client_brut(agent).get(f"/api/v1/mairie/{volet}").status_code == 200
+    def test_acceptee_dans_l_espace_mairie(self, ibdc, volet):
+        assert ibdc.get(f"/api/v1/mairie/{volet}").status_code == 200
 
     @pytest.mark.parametrize("volet", COMMUNS)
-    def test_routes_communes_inchangees(self, agent, volet):
-        assert client_brut(agent).get(f"/api/v1/{volet}").status_code == 200
+    def test_routes_communes_inchangees(self, ibdc, volet):
+        assert ibdc.get(f"/api/v1/{volet}").status_code == 200
 
-    def test_pas_de_synthese_separee_par_secteur_ou_quartier(self, agent):
+    def test_pas_de_synthese_separee_par_secteur_ou_quartier(self, ibdc):
         for volet in ("dashboard/par-secteur/", "dashboard/par-quartier/", "auth/me/"):
-            assert client_brut(agent).get(f"/api/v1/mairie/{volet}").status_code == 404
+            assert ibdc.get(f"/api/v1/mairie/{volet}").status_code == 404
 
 
-def test_actions_des_citoyens_et_organisations_absentes_de_l_espace_mairie(agent):
-    client = client_brut(agent)
+class TestJetonDeMairie:
+    """Un agent ou admin de commune connecté par jeton n'a accès à aucun des deux espaces."""
+
+    @pytest.mark.parametrize("role", [Utilisateur.Role.AGENT, Utilisateur.Role.ADMIN_MAIRIE])
+    def test_refuse_dans_l_espace_mairie(self, creer_utilisateur, role):
+        client = client_brut(creer_utilisateur(role=role))
+        for volet in VOLETS:
+            reponse = client.get(f"/api/v1/mairie/{volet}")
+            assert reponse.status_code == 403, volet
+            assert reponse.json()["erreur"]["code"] == CodeErreur.PERMISSION_REFUSEE
+
+    def test_refuse_sur_les_routes_generales(self, agent):
+        reponse = client_brut(agent).get("/api/v1/signalements/")
+        assert reponse.json()["erreur"]["code"] == CodeErreur.ESPACE_MAIRIE_REQUIS
+
+
+def test_actions_des_citoyens_et_organisations_absentes_de_l_espace_mairie(ibdc):
+    client = ibdc
     assert client.post("/api/v1/mairie/signalements/", {}, format="json").status_code == 405
     assert client.post("/api/v1/mairie/suggestions/", {}, format="json").status_code == 405
     for chemin in ("signalements/1/prendre-en-charge/", "suggestions/1/soutenir/"):

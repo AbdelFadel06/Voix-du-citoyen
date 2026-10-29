@@ -157,6 +157,13 @@ class TestAuthentification:
         )
         assert reponse.json()["erreur"]["code"] == CodeErreur.IDENTIFIANTS_INVALIDES
 
+    def test_jeton_d_une_mairie_refuse_dans_l_espace_mairie(self, creer_utilisateur, client_connecte, parakou):
+        # Seules les clés d'institution (IBDC) entrent dans /mairie/, pas les comptes connectés.
+        for role in (Utilisateur.Role.AGENT, Utilisateur.Role.ADMIN_MAIRIE):
+            compte = creer_utilisateur(role=role, commune=parakou)
+            reponse = client_connecte(compte, routes_generales=True).get(URL_SIGNALEMENTS)
+            assert reponse.status_code == 403 and reponse.json()["erreur"]["code"] == CodeErreur.PERMISSION_REFUSEE
+
     def test_absent_de_la_liste_des_agents(self, institution):
         reponse = client_cle(institution.cle).get(reverse("mairie:accounts:agents"))
         assert institution.compte.pk not in [a["id"] for a in reponse.json()["donnees"]]
@@ -186,9 +193,12 @@ class TestAgentExterne:
         assert reponse.json()["donnees"]["historique"][-1]["auteur_nom"] == "Compte technique IBDC Mairie de Parakou"
 
     def test_ignore_hors_cle_d_api(self, creer_utilisateur, client_connecte, signaler, parakou):
-        agent = creer_utilisateur(role=Utilisateur.Role.ADMIN_MAIRIE, commune=parakou, nom="Kora", prenoms="Aminatou")
+        # Avec un jeton (admin de la plateforme, routes générales), X-Agent n'est pas repris.
+        plateforme = creer_utilisateur(role=Utilisateur.Role.ADMIN_MAIRIE, commune=None, nom="Kora", prenoms="Aminatou")
         dossier = signaler(parakou)
-        self.changer_statut(client_connecte(agent), dossier, HTTP_X_AGENT="Usurpateur")
+        url = reverse("signalements:signalement-changer-statut", args=[dossier.pk])
+        reponse = client_connecte(plateforme).post(url, {"statut": "RECU"}, format="json", HTTP_X_AGENT="Usurpateur")
+        assert reponse.status_code == 200, reponse.json()
         assert dossier.suivis.last().agent_externe == ""
 
 
@@ -225,14 +235,15 @@ class TestLimiteDeDebit:
         settings.REST_FRAMEWORK = {**settings.REST_FRAMEWORK, "DEFAULT_THROTTLE_RATES": taux}
         from apps.interop.throttling import ThrottleCleApi
 
+        origine = ThrottleCleApi.THROTTLE_RATES
         ThrottleCleApi.THROTTLE_RATES = taux
         try:
             client = client_cle(institution.cle)
             codes = [client.get(URL_SIGNALEMENTS).status_code for _ in range(4)]
             assert codes == [200, 200, 200, 429]
             # Les comptes connectés par jeton ne sont pas concernés.
-            agent = client_connecte(creer_utilisateur(role=Utilisateur.Role.AGENT))
-            assert all(agent.get(URL_SIGNALEMENTS).status_code == 200 for _ in range(4))
+            plateforme = creer_utilisateur(role=Utilisateur.Role.ADMIN_MAIRIE, commune=None)
+            assert all(client_connecte(plateforme).get("/api/v1/signalements/").status_code == 200 for _ in range(4))
         finally:
-            ThrottleCleApi.THROTTLE_RATES = api_settings.DEFAULT_THROTTLE_RATES
+            ThrottleCleApi.THROTTLE_RATES = origine
             cache.clear()

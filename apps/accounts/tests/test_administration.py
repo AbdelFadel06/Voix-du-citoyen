@@ -138,7 +138,7 @@ class TestAgents:
 
     def test_desactiver_coupe_l_acces(self, admin, voirie, creer_utilisateur, client_connecte):
         agent = creer_utilisateur(role=Utilisateur.Role.AGENT, service=voirie)
-        session = client_connecte(agent)
+        session = client_connecte(agent, routes_generales=True)
         reponse = admin.patch(url_agent(agent), {"actif": False}, format="json")
         assert reponse.json()["donnees"]["actif"] is False
         refus = session.get(reverse("accounts:me"))
@@ -157,8 +157,9 @@ class TestAgents:
 
     @pytest.mark.parametrize("changement", [{"actif": False}, {"role": "AGENT"}])
     def test_un_admin_ne_peut_pas_se_retirer_lui_meme(self, admin, compte_admin, voirie, changement):
+        # Le compte technique d'une clé IBDC n'est pas dans la liste des agents : il ne peut pas se modifier.
         reponse = admin.patch(url_agent(compte_admin), {**changement, "service": voirie.pk}, format="json")
-        assert reponse.json()["erreur"]["code"] == CodeErreur.ACTION_SUR_SON_PROPRE_COMPTE
+        assert reponse.json()["erreur"]["code"] == CodeErreur.RESSOURCE_INTROUVABLE
         compte_admin.refresh_from_db()
         assert compte_admin.is_active and compte_admin.role == Utilisateur.Role.ADMIN_MAIRIE
 

@@ -106,14 +106,42 @@ VOLETS_MAIRIE = {
 class ClientMairie(APIClient):
     """
     Client d'un agent ou admin de commune : envoie dans l'espace /api/v1/mairie/… les appels
-    écrits avec les adresses générales (`reverse("signalements:…")`), comme le fait le site web
-    de la mairie. Les refus hors de cet espace sont testés dans apps/core/tests/test_espaces.py.
+    écrits avec les adresses générales (`reverse("signalements:…")`), avec une clé d'API
+    d'institution comme le fait IBDC (le compte du test en devient le compte technique, créé avec le client). Les refus hors de cet espace sont testés dans apps/core/tests/test_espaces.py.
     """
+
+    def __init__(self, utilisateur, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.utilisateur = utilisateur
+        self.cle = None
+        self._cle()  # tout de suite : les tests qui comptent les requêtes ne voient pas sa création
+
+    def _cle(self):
+        if self.cle is None:
+            from apps.interop import services as interop
+            from apps.interop.models import Institution
+
+            institution = Institution.objects.filter(compte=self.utilisateur).first() or Institution.objects.create(
+                id_externe=f"test-{self.utilisateur.pk}", nom=f"Mairie {self.utilisateur.nom}",
+                commune_id=self.utilisateur.commune_id, compte=self.utilisateur,
+                cle_prefixe=f"t{self.utilisateur.pk}",
+            )
+            self.cle = interop.generer_cle(institution)
+        return self.cle
 
     def generic(self, method, path, *args, **kwargs):
         morceaux = path.split("/")
         if path.startswith("/api/v1/") and len(morceaux) > 3 and morceaux[3] in VOLETS_MAIRIE:
             path = "/".join([*morceaux[:3], "mairie", *morceaux[3:]])
+        if path.startswith("/api/v1/mairie/"):
+            jeton = self._credentials.pop("HTTP_AUTHORIZATION", None)
+            self._credentials["HTTP_X_API_KEY"] = self._cle()
+            try:
+                return super().generic(method, path, *args, **kwargs)
+            finally:
+                del self._credentials["HTTP_X_API_KEY"]
+                if jeton:
+                    self._credentials["HTTP_AUTHORIZATION"] = jeton
         return super().generic(method, path, *args, **kwargs)
 
 
@@ -121,7 +149,7 @@ def client_pour(utilisateur):
     """APIClient adapté au compte (espace mairie pour un agent ou admin de commune)."""
     from apps.core.espaces import est_mairie_de_commune
 
-    return ClientMairie() if est_mairie_de_commune(utilisateur) else APIClient()
+    return ClientMairie(utilisateur) if est_mairie_de_commune(utilisateur) else APIClient()
 
 
 @pytest.fixture

@@ -28,6 +28,7 @@ de chaque champ et de chaque erreur est dans Swagger.
   (signalements, suggestions, réalisations, tableaux de bord, secteurs, quartiers,
   organisations : liste complète au § 1.5). La commune vient de la clé : elle n'est **ni un paramètre ni une
   partie de l'adresse**. Les adresses sans `/mairie/` répondent `403 ESPACE_MAIRIE_REQUIS`.
+  **Seule la clé ouvre cet espace** : aucun compte connecté par mot de passe (jeton) n'y a accès.
   Restent hors de cet espace : `GET /api/v1/auth/me/` et `POST /api/v1/medias/`.
 - **Droits** : ceux d'un administrateur de la mairie, **limités à sa commune** (les dossiers
   des autres communes répondent 404).

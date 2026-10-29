@@ -60,11 +60,13 @@ vaut pour les suggestions et les réalisations.
 
 ### Espace mairie (`/api/v1/mairie/…`)
 
-Les agents et admins d'une mairie (site web de la mairie, plateforme IBDC) utilisent **leurs
-propres adresses**, préfixées par `/mairie/` : signalements, suggestions, réalisations,
+La mairie travaille depuis la **plateforme IBDC**, seule à pouvoir entrer dans l'espace mairie,
+avec la **clé d'API** de la mairie (`X-Api-Key`, voir plus bas). Un jeton de connexion, même
+d'un agent ou admin mairie, y est refusé (`PERMISSION_REFUSEE`). Cet espace a **ses propres
+adresses**, préfixées par `/mairie/` : signalements, suggestions, réalisations,
 tableaux de bord, secteurs, quartiers, arrondissements, communes, services, agents et
-organisations (groupes « Mairie · … »). La **commune vient toujours du compte** (jeton ou clé
-d'API) : elle n'est ni un paramètre ni une partie de l'adresse. Sur les autres adresses de ces
+organisations (groupes « Mairie · … »). La **commune vient toujours de la clé** : elle n'est ni un
+paramètre ni une partie de l'adresse. Sur les autres adresses de ces
 volets, la mairie reçoit `ESPACE_MAIRIE_REQUIS` (403) ; les citoyens, organisations et l'admin de
 la plateforme (compte mairie sans commune) y restent, et sont refusés dans l'espace mairie.
 L'authentification (`/auth/…`), les médias et les notifications sont communs à tous.

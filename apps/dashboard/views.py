@@ -199,23 +199,23 @@ Filtre supplémentaire : `statut` (signalements).
 
 
 # ---------------------------------------------------------------------------
-# Espace mairie (/api/v1/mairie/dashboard/…) : la commune vient du jeton ou de la clé.
+# Espace mairie (/api/v1/mairie/dashboard/…) : clé d'API IBDC seulement, la commune vient de la clé.
 # ---------------------------------------------------------------------------
 
 ACCES_MAIRIE = """
-**Commune** : toujours celle du compte (jeton ou clé d'API) ; aucun paramètre `commune`.
+**Commune** : toujours celle de la clé d'API ; aucun paramètre `commune`.
 
 **Filtres** : `date_debut`, `date_fin` (date de création des dossiers), `secteur`, `quartier`.
 
-**Connecté** : agents et admins d'une mairie (et institutions IBDC). Les autres comptes
-reçoivent `PERMISSION_REFUSEE`.
+**Connecté** : clé d'API d'une institution (plateforme IBDC des mairies) uniquement. Tout
+jeton de connexion, même d'un agent ou admin mairie, reçoit `PERMISSION_REFUSEE`.
 """
 EXEMPLES_ERREURS_MAIRIE = [
     EXEMPLES_ERREURS[0],
     exemple_erreur(
         CodeErreur.PERMISSION_REFUSEE,
-        "Espace réservé aux agents et administrateurs d'une mairie.",
-        nom="Compte hors mairie",
+        "Espace réservé à la plateforme des mairies (IBDC), avec la clé d'API de la mairie.",
+        nom="Sans clé IBDC",
     ),
     *EXEMPLES_AUTH_REQUISE,
 ]
