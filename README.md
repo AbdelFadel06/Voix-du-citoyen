@@ -222,10 +222,31 @@ créer les éléments un par un (`POST /api/v1/secteurs/`, `/quartiers/`, `/serv
 - **Citoyen** : depuis Swagger, `POST /auth/register/` (avec `commune` : l'`id` lu dans
   `GET /communes/`, liste publique), puis `POST /auth/otp/verify/` avec
   le code affiché dans le terminal de `runserver`.
-- **Agent de la mairie** : avec un compte admin, `POST /api/v1/agents/` (rôle `AGENT`,
-  rattaché à un service de la commune), ou dans l'admin Django.
+- **Mairie** : pas de compte à créer. Les agents de la mairie travaillent dans la plateforme
+  **IBDC**, qui appelle l'API avec la clé de son institution (voir « Connecter une mairie de la
+  plateforme IBDC »). Pour essayer dans Swagger comme la mairie : **Authorize**, champ `cleApi`,
+  coller la clé, puis utiliser les adresses `/api/v1/mairie/…`.
 - **Organisation** (ONG, OSC) : créer l'**organisation** dans l'admin, puis un utilisateur
   de rôle `ORGANISATION` rattaché à elle.
+
+### 3.4 Espace mairie (`/api/v1/mairie/…`)
+
+Une mairie (clé IBDC) n'utilise que les adresses préfixées par `/api/v1/mairie/` ; sa commune
+vient de la clé, jamais d'un paramètre. Sur les autres adresses, elle reçoit
+`403 ESPACE_MAIRIE_REQUIS`.
+
+| Volet | Adresses (`/api/v1/mairie/…`) |
+|---|---|
+| Tableau de bord | `dashboard/synthese/` (chiffres globaux, par secteur, par quartier), `dashboard/evolution/`, `dashboard/carte/` |
+| Signalements | `signalements/`, `signalements/{id}/`, `…/changer-statut/`, `…/repondre/`, `…/affecter-organisation/` (confier à une ONG) |
+| Suggestions | `suggestions/`, `suggestions/{id}/`, `…/repondre/`, `…/pertinente/` |
+| Réalisations | `realisations/`, `realisations/{id}/` |
+| Organisations | `organisations/`, `organisations/{id}/`, `…/retirer-commune/`, `…/membres/` |
+| Référentiel | `secteurs/`, `quartiers/`, `arrondissements/`, `communes/` |
+
+Le guide complet pour l'équipe IBDC, page par page, est dans `docs/integration_ibdc.md`.
+Les citoyens (mobile), les organisations (web des ONG) et l'admin de la plateforme gardent les
+adresses `/api/v1/…` sans `/mairie/`.
 
 Pour appeler les routes protégées dans Swagger : `POST /auth/login/` (`email` + `password`
 pour la mairie et les organisations, `telephone` + `password` pour un citoyen), copier le

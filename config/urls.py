@@ -4,17 +4,53 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
+from apps.accounts import urls as accounts
+from apps.core.espaces import EspaceMairie, HorsEspaceMairie, garder
+from apps.dashboard import urls as dashboard
+from apps.realisations import urls as realisations
+from apps.referentiel import urls as referentiel
+from apps.signalements import urls as signalements
+from apps.suggestions import urls as suggestions
+from apps.territoire import urls as territoire
+
+# Volets que la mairie d'une commune utilise par l'espace /mairie/ (apps.core.espaces).
+# Restent communs à tous : authentification, médias, notifications, santé.
+VOLETS_MAIRIE = [territoire, accounts, referentiel, signalements, suggestions, realisations]
+# Actions réservées aux citoyens ou aux organisations : absentes de l'espace mairie.
+ACTIONS_HORS_MAIRIE = {
+    "signalements": {"create", "mes_signalements", "prendre_en_charge"},
+    "suggestions": {"create", "soutenir"},
+}
+
+
+def _hors_auth(motif):
+    return not str(motif.pattern).startswith("auth/")
+
+
+def _routes_generales(module):
+    return include((garder(module.urlpatterns, HorsEspaceMairie, selection=_hors_auth), module.app_name))
+
+
+def _routes_mairie(module):
+    motifs = garder(
+        module.urlpatterns, EspaceMairie, espace_mairie=True, selection=_hors_auth,
+        actions_exclues=ACTIONS_HORS_MAIRIE.get(module.app_name, ()),
+    )
+    return include((motifs, module.app_name), namespace=module.app_name)
+
+
+espace_mairie = [
+    *[path("", _routes_mairie(module)) for module in VOLETS_MAIRIE],
+    path("", include((dashboard.urlpatterns_mairie, "dashboard"), namespace="dashboard")),
+]
+
 api_v1 = [
     path("", include("apps.core.urls")),
-    path("", include("apps.territoire.urls")),
-    path("", include("apps.accounts.urls")),
-    path("", include("apps.referentiel.urls")),
     path("", include("apps.medias.urls")),
-    path("", include("apps.signalements.urls")),
-    path("", include("apps.suggestions.urls")),
-    path("", include("apps.realisations.urls")),
     path("", include("apps.notifications.urls")),
-    path("", include("apps.dashboard.urls")),
+    *[path("", _routes_generales(module)) for module in VOLETS_MAIRIE],
+    path("", include((garder(dashboard.urlpatterns, HorsEspaceMairie), "dashboard"))),
+    path("mairie/", include((espace_mairie, "mairie"))),
 ]
 
 urlpatterns = [

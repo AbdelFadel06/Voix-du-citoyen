@@ -174,7 +174,7 @@ class TestGestion:
     def test_tableau_de_bord_de_la_mairie_sans_brouillons_des_ong(self, ong, agent, client_connecte, parakou, eau):
         services.creer_realisation(par=ong, titre="Forage", description="Forage", secteur=eau, quartiers=[quartier_de(parakou)])
         services.creer_realisation(par=agent, titre="Borne", description="Borne", secteur=eau, quartiers=[quartier_de(parakou)])
-        realisations = client_connecte(agent).get(reverse("dashboard:synthese")).json()["donnees"]["realisations"]
+        realisations = client_connecte(agent).get(reverse("dashboard:synthese")).json()["donnees"]["globales"]["realisations"]
         assert (realisations["total"], realisations["brouillons"]) == (1, 1)
 
 

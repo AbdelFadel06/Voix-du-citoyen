@@ -94,9 +94,11 @@ class TestCreation:
         )
         client = APIClient()
         client.credentials(HTTP_X_API_KEY=cle)
-        reponse = client.post(URL, corps(secteurs=[eau.pk]), format="json")
+        reponse = client.post(reverse("mairie:accounts:organisations"), corps(secteurs=[eau.pk]), format="json")
         assert reponse.status_code == 201, reponse.json()
         assert reponse.json()["donnees"]["communes"][0]["nom"] == "Parakou"
+        # La clé d'une mairie ne sert que dans l'espace mairie.
+        assert client.get(URL).json()["erreur"]["code"] == CodeErreur.ESPACE_MAIRIE_REQUIS
 
     def test_meme_numero_dans_une_autre_commune_sans_doublon(self, admin_de, parakou, cotonou, eau, sante):
         premiere = admin_de(parakou).post(URL, corps(secteurs=[eau.pk]), format="json").json()["donnees"]

@@ -179,8 +179,10 @@ class TestAcces:
 
     @pytest.mark.parametrize("role", [Utilisateur.Role.AGENT, Utilisateur.Role.ADMIN_MAIRIE, Utilisateur.Role.ORGANISATION])
     def test_reserve_aux_citoyens(self, creer_utilisateur, client_connecte, donnees_gps, role):
-        client = client_connecte(creer_utilisateur(role=role))
-        erreur(envoyer(client, donnees_gps()), CodeErreur.PERMISSION_REFUSEE, 403)
+        # Un agent de commune n'a pas cette action dans son espace : refusé sur la route générale.
+        client = client_connecte(creer_utilisateur(role=role), routes_generales=True)
+        code = CodeErreur.ESPACE_MAIRIE_REQUIS if role == Utilisateur.Role.AGENT else CodeErreur.PERMISSION_REFUSEE
+        erreur(envoyer(client, donnees_gps()), code, 403)
 
     def test_limitation_par_citoyen(self, client, donnees_gps, monkeypatch):
         monkeypatch.setitem(ScopedRateThrottle.THROTTLE_RATES, "creation_signalement", "2/day")

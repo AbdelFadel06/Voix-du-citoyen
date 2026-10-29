@@ -131,9 +131,9 @@ class TestMesSignalements:
         assert corps["pagination"]["total"] == 1
 
     def test_reserve_aux_citoyens(self, agent, client_connecte):
-        reponse = client_connecte(agent).get(URL_MES)
+        reponse = client_connecte(agent, routes_generales=True).get(URL_MES)
         assert reponse.status_code == 403
-        assert reponse.json()["erreur"]["code"] == CodeErreur.PERMISSION_REFUSEE
+        assert reponse.json()["erreur"]["code"] == CodeErreur.ESPACE_MAIRIE_REQUIS
 
 
 class TestDetail:

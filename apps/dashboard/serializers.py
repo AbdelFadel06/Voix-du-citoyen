@@ -79,6 +79,27 @@ class FiltresCarteSerializer(FiltresSerializer):
     )
 
 
+# Espace mairie : la commune vient du compte, aucun paramètre `commune`.
+
+
+class FiltresSyntheseMairieSerializer(FiltresQuartierSerializer):
+    commune = None
+    arrondissement = serializers.PrimaryKeyRelatedField(
+        queryset=Arrondissement.objects.all(),
+        required=False,
+        error_messages={"does_not_exist": "Cet arrondissement n'existe pas."},
+        help_text="Limiter le tableau par quartier aux quartiers d'un arrondissement (identifiant).",
+    )
+
+
+class FiltresEvolutionMairieSerializer(FiltresEvolutionSerializer):
+    commune = None
+
+
+class FiltresCarteMairieSerializer(FiltresCarteSerializer):
+    commune = None
+
+
 # ---------------------------------------------------------------------------
 # Réponses
 # ---------------------------------------------------------------------------
@@ -238,3 +259,9 @@ class CarteSerializer(serializers.Serializer):
         many=True, help_text="Nombre de signalements par quartier, au centre du quartier (carte de chaleur)."
     )
     realisations = PointRealisationSerializer(many=True, help_text="Réalisations localisées.")
+
+
+class SyntheseCompleteSerializer(serializers.Serializer):
+    globales = SyntheseSerializer(help_text="Chiffres clés de la commune (même contenu que la synthèse).")
+    par_secteur = LigneSecteurSerializer(many=True, help_text="Une ligne par secteur, du plus grand nombre de signalements au plus petit.")
+    par_quartier = LigneQuartierSerializer(many=True, help_text="Une ligne par quartier ayant au moins un dossier, du plus grand nombre de signalements au plus petit.")

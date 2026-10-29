@@ -181,7 +181,8 @@ class TestSuggestionsEtTableaux:
         signaler(creer_utilisateur(commune=cotonou))
         signaler(creer_utilisateur(commune=cotonou))
         url = reverse("dashboard:synthese")
-        assert client_connecte(agent_de(parakou)).get(url, {"commune": cotonou.pk}).json()["donnees"]["signalements"]["total"] == 1
+        mairie = client_connecte(agent_de(parakou)).get(url, {"commune": cotonou.pk}).json()["donnees"]
+        assert mairie["globales"]["signalements"]["total"] == 1
         ong = client_connecte(creer_utilisateur(role=Utilisateur.Role.ORGANISATION))
         assert ong.get(url).json()["donnees"]["signalements"]["total"] == 3
         assert ong.get(url, {"commune": cotonou.pk}).json()["donnees"]["signalements"]["total"] == 2

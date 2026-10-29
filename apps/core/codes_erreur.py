@@ -16,6 +16,7 @@ class CodeErreur(models.TextChoices):
     JETON_INVALIDE = "JETON_INVALIDE"
     CLE_API_INVALIDE = "CLE_API_INVALIDE"
     PERMISSION_REFUSEE = "PERMISSION_REFUSEE"
+    ESPACE_MAIRIE_REQUIS = "ESPACE_MAIRIE_REQUIS"
     RESSOURCE_INTROUVABLE = "RESSOURCE_INTROUVABLE"
     METHODE_NON_AUTORISEE = "METHODE_NON_AUTORISEE"
     CONFLIT = "CONFLIT"
@@ -106,6 +107,10 @@ INFOS_ERREURS = {
     CodeErreur.OTP_TENTATIVES_DEPASSEES: (
         429,
         "Trop d'essais avec ce code. Demandez-en un nouveau.",
+    ),
+    CodeErreur.ESPACE_MAIRIE_REQUIS: (
+        403,
+        "La mairie passe par les adresses /api/v1/mairie/… : sa commune vient de son compte.",
     ),
     CodeErreur.EMAIL_ECHEC: (503, "L'e-mail n'a pas pu être envoyé. Réessayez dans quelques minutes."),
     CodeErreur.SMS_ECHEC: (

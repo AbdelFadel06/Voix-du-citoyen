@@ -96,12 +96,41 @@ def creer_utilisateur(db, nouveau_telephone):
     return _creer
 
 
+# Volets que la mairie d'une commune utilise par /api/v1/mairie/… (config/urls.py).
+VOLETS_MAIRIE = {
+    "signalements", "suggestions", "realisations", "secteurs", "quartiers", "arrondissements",
+    "communes", "services", "agents", "organisations", "dashboard",
+}
+
+
+class ClientMairie(APIClient):
+    """
+    Client d'un agent ou admin de commune : envoie dans l'espace /api/v1/mairie/… les appels
+    écrits avec les adresses générales (`reverse("signalements:…")`), comme le fait le site web
+    de la mairie. Les refus hors de cet espace sont testés dans apps/core/tests/test_espaces.py.
+    """
+
+    def generic(self, method, path, *args, **kwargs):
+        morceaux = path.split("/")
+        if path.startswith("/api/v1/") and len(morceaux) > 3 and morceaux[3] in VOLETS_MAIRIE:
+            path = "/".join([*morceaux[:3], "mairie", *morceaux[3:]])
+        return super().generic(method, path, *args, **kwargs)
+
+
+def client_pour(utilisateur):
+    """APIClient adapté au compte (espace mairie pour un agent ou admin de commune)."""
+    from apps.core.espaces import est_mairie_de_commune
+
+    return ClientMairie() if est_mairie_de_commune(utilisateur) else APIClient()
+
+
 @pytest.fixture
 def client_connecte():
     """Renvoie un APIClient authentifié par JWT pour l'utilisateur donné."""
 
-    def _client(utilisateur):
-        client = APIClient()
+    def _client(utilisateur, routes_generales=False):
+        """`routes_generales` : sans passage par l'espace mairie (pour tester les refus)."""
+        client = APIClient() if routes_generales else client_pour(utilisateur)
         jeton = services.generer_jetons(utilisateur)["access"]
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {jeton}")
         return client

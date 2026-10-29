@@ -18,7 +18,7 @@ from apps.territoire.models import Arrondissement, Commune, Quartier
 
 pytestmark = pytest.mark.django_db
 
-URL_SIGNALEMENTS = reverse("signalements:signalement-list")
+URL_SIGNALEMENTS = reverse("mairie:signalements:signalement-list")
 
 
 def creer_commune(nom, code):
@@ -112,7 +112,7 @@ class TestAuthentification:
         assert reponse.status_code == 200, reponse.json()
         assert [d["id"] for d in reponse.json()["donnees"]] == [a_parakou.pk]
         # Peut traiter les dossiers de sa commune.
-        url = reverse("signalements:signalement-changer-statut", args=[a_parakou.pk])
+        url = reverse("mairie:signalements:signalement-changer-statut", args=[a_parakou.pk])
         assert client.post(url, {"statut": "RECU"}, format="json").status_code == 200
 
     @pytest.mark.parametrize("cle", ["n-importe-quoi", "vdc_000000000000_faux", ""])
@@ -158,13 +158,13 @@ class TestAuthentification:
         assert reponse.json()["erreur"]["code"] == CodeErreur.IDENTIFIANTS_INVALIDES
 
     def test_absent_de_la_liste_des_agents(self, institution):
-        reponse = client_cle(institution.cle).get(reverse("accounts:agents"))
+        reponse = client_cle(institution.cle).get(reverse("mairie:accounts:agents"))
         assert institution.compte.pk not in [a["id"] for a in reponse.json()["donnees"]]
 
 
 class TestAgentExterne:
     def changer_statut(self, client, dossier, **entetes):
-        url = reverse("signalements:signalement-changer-statut", args=[dossier.pk])
+        url = reverse("mairie:signalements:signalement-changer-statut", args=[dossier.pk])
         return client.post(url, {"statut": "RECU", "commentaire": "Pris en compte."}, format="json", **entetes)
 
     @pytest.mark.parametrize(
@@ -206,7 +206,7 @@ class TestModifieDepuis:
         client = client_cle(institution.cle)
         assert [d["id"] for d in client.get(URL_SIGNALEMENTS, {"modifie_depuis": depuis}).json()["donnees"]] == [recent.pk]
         # Un changement de statut fait revenir le dossier.
-        client.post(reverse("signalements:signalement-changer-statut", args=[ancien.pk]), {"statut": "RECU"}, format="json")
+        client.post(reverse("mairie:signalements:signalement-changer-statut", args=[ancien.pk]), {"statut": "RECU"}, format="json")
         ids = {d["id"] for d in client.get(URL_SIGNALEMENTS, {"modifie_depuis": depuis}).json()["donnees"]}
         assert ids == {ancien.pk, recent.pk}
 

@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 
 from apps.core.codes_erreur import CodeErreur
 from apps.core.communes import commune_imposee
+from apps.core.espaces import EspaceMairie
 from apps.core.permissions import EstMairieOuOrganisation, est_personnel_mairie
 from apps.core.visibilite import communes_autorisees, secteurs_autorises
 from apps.core.reponses import reponse_succes
@@ -13,22 +14,27 @@ from . import exemples, services
 from .serializers import (
     CarteSerializer,
     EvolutionSerializer,
+    FiltresCarteMairieSerializer,
     FiltresCarteSerializer,
+    FiltresEvolutionMairieSerializer,
     FiltresEvolutionSerializer,
     FiltresQuartierSerializer,
     FiltresSerializer,
+    FiltresSyntheseMairieSerializer,
     LigneQuartierSerializer,
     LigneSecteurSerializer,
+    SyntheseCompleteSerializer,
     SyntheseSerializer,
 )
 
 ACCES = """
-**Commune** : la mairie d'une commune ne voit que la sienne ; les organisations et les admins
-de la plateforme voient toutes les communes ensemble, ou une seule avec `?commune=<id>`.
+**Commune** : les organisations et l'admin de la plateforme voient toutes les communes ensemble,
+ou une seule avec `?commune=<id>`. La mairie d'une commune utilise l'espace mairie
+(`/api/v1/mairie/dashboard/…`) : ici, elle reçoit `ESPACE_MAIRIE_REQUIS`.
 
 **Filtres communs** : `date_debut`, `date_fin` (date de création des dossiers), `secteur`, `quartier`.
 
-**Connecté** : agents, admins mairie et organisations habilitées. Les organisations ne voient
+**Connecté** : organisations habilitées et admin de la plateforme. Les organisations ne voient
 que les **signalements de leurs communes et secteurs d'intervention**, **aucune suggestion** (les champs
 `suggestions…` sont absents de leurs réponses) et pas les réalisations en brouillon.
 """
@@ -190,3 +196,111 @@ Filtre supplémentaire : `statut` (signalements).
         filtres = self.filtres(request)
         statut = filtres.pop("statut", None)
         return reponse_succes(CarteSerializer(services.carte(filtres, self.mairie, statut)).data)
+
+
+# ---------------------------------------------------------------------------
+# Espace mairie (/api/v1/mairie/dashboard/…) : la commune vient du jeton ou de la clé.
+# ---------------------------------------------------------------------------
+
+ACCES_MAIRIE = """
+**Commune** : toujours celle du compte (jeton ou clé d'API) ; aucun paramètre `commune`.
+
+**Filtres** : `date_debut`, `date_fin` (date de création des dossiers), `secteur`, `quartier`.
+
+**Connecté** : agents et admins d'une mairie (et institutions IBDC). Les autres comptes
+reçoivent `PERMISSION_REFUSEE`.
+"""
+EXEMPLES_ERREURS_MAIRIE = [
+    EXEMPLES_ERREURS[0],
+    exemple_erreur(
+        CodeErreur.PERMISSION_REFUSEE,
+        "Espace réservé aux agents et administrateurs d'une mairie.",
+        nom="Compte hors mairie",
+    ),
+    *EXEMPLES_AUTH_REQUISE,
+]
+
+
+class VueTableauMairie(VueTableau):
+    permission_classes = [EspaceMairie]
+
+
+class SyntheseCompleteView(VueTableauMairie):
+    filtres_class = FiltresSyntheseMairieSerializer
+
+    @extend_schema(
+        tags=[TAG_TABLEAUX_DE_BORD],
+        summary="Récapitulatif complet de la mairie",
+        description=f"""
+Tout le récapitulatif de la commune en un seul appel :
+
+1. `globales` : chiffres clés — signalements (total, par statut, ouverts, taux et délai moyen
+   de résolution), suggestions (nombre, soutiens, pertinentes) et réalisations (par statut,
+   brouillons, budget total en FCFA, avancement moyen) ;
+2. `par_secteur` : une ligne par secteur (signalements, ouverts, résolus, taux de résolution,
+   suggestions, réalisations), du plus grand nombre de signalements au plus petit ;
+3. `par_quartier` : une ligne par quartier ayant au moins un dossier, mêmes colonnes.
+
+Les filtres s'appliquent aux trois blocs ; `arrondissement` ne limite que `par_quartier`.
+L'évolution dans le temps et la carte restent à part (`/mairie/dashboard/evolution/`,
+`/mairie/dashboard/carte/`), car plus lourdes.
+{ACCES_MAIRIE}""",
+        parameters=[FiltresSyntheseMairieSerializer],
+        responses={200: enveloppe(SyntheseCompleteSerializer), **erreurs(400, 401, 403)},
+        examples=[exemple_succes("Récapitulatif", exemples.SYNTHESE_COMPLETE), *EXEMPLES_ERREURS_MAIRIE],
+    )
+    def get(self, request):
+        filtres = self.filtres(request)
+        arrondissement = filtres.pop("arrondissement", None)
+        donnees = {
+            "globales": services.synthese(filtres, True),
+            "par_secteur": services.par_secteur(filtres, True),
+            "par_quartier": services.par_quartier(filtres, True, arrondissement),
+        }
+        return reponse_succes(SyntheseCompleteSerializer(donnees).data)
+
+
+class EvolutionMairieView(VueTableauMairie, EvolutionView):
+    filtres_class = FiltresEvolutionMairieSerializer
+
+    @extend_schema(
+        tags=[TAG_TABLEAUX_DE_BORD],
+        summary="Évolution dans le temps (mairie)",
+        description=f"""
+Série chronologique de la commune, **sans trou** (0 pour une période sans dossier) :
+signalements envoyés, signalements résolus (à leur date de résolution) et suggestions envoyées.
+
+- `periode` : `jour`, `semaine` (du lundi) ou `mois` (défaut).
+- Sans dates : les 30 derniers jours, les 12 dernières semaines ou les 12 derniers mois.
+- 400 points au maximum.
+{ACCES_MAIRIE}""",
+        parameters=[FiltresEvolutionMairieSerializer],
+        responses={200: enveloppe(EvolutionSerializer), **erreurs(400, 401, 403)},
+        examples=[exemple_succes("Par mois", exemples.EVOLUTION), *EXEMPLES_ERREURS_MAIRIE],
+    )
+    def get(self, request):
+        return super().get(request)
+
+
+class CarteMairieView(VueTableauMairie, CarteView):
+    filtres_class = FiltresCarteMairieSerializer
+
+    @extend_schema(
+        tags=[TAG_TABLEAUX_DE_BORD],
+        summary="Données de la carte (mairie)",
+        description=f"""
+Éléments à placer sur la carte de la commune :
+- `signalements` : signalements localisés en **GPS** (2 000 au maximum, les plus récents ;
+  `signalements_tronques` indique s'il faut affiner les filtres) ;
+- `quartiers` : **tous** les signalements (GPS et manuels) comptés par quartier, au centre
+  du quartier (pour une carte de chaleur) ;
+- `realisations` : réalisations localisées.
+
+Filtre supplémentaire : `statut` (signalements).
+{ACCES_MAIRIE}""",
+        parameters=[FiltresCarteMairieSerializer],
+        responses={200: enveloppe(CarteSerializer), **erreurs(400, 401, 403)},
+        examples=[exemple_succes("Carte", exemples.CARTE), *EXEMPLES_ERREURS_MAIRIE],
+    )
+    def get(self, request):
+        return super().get(request)

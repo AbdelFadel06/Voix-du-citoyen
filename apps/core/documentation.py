@@ -58,13 +58,39 @@ vaut pour les suggestions et les réalisations.
    pour ouvrir le bon écran ; la liste complète est dans `GET /api/v1/notifications/`.
 3. À la déconnexion : envoyer `token_fcm` à `POST /api/v1/auth/logout/`.
 
+### Espace mairie (`/api/v1/mairie/…`)
+
+Les agents et admins d'une mairie (site web de la mairie, plateforme IBDC) utilisent **leurs
+propres adresses**, préfixées par `/mairie/` : signalements, suggestions, réalisations,
+tableaux de bord, secteurs, quartiers, arrondissements, communes, services, agents et
+organisations (groupes « Mairie · … »). La **commune vient toujours du compte** (jeton ou clé
+d'API) : elle n'est ni un paramètre ni une partie de l'adresse. Sur les autres adresses de ces
+volets, la mairie reçoit `ESPACE_MAIRIE_REQUIS` (403) ; les citoyens, organisations et l'admin de
+la plateforme (compte mairie sans commune) y restent, et sont refusés dans l'espace mairie.
+L'authentification (`/auth/…`), les médias et les notifications sont communs à tous.
+
+`GET /api/v1/mairie/dashboard/synthese/` donne en un seul appel le récapitulatif complet de la
+commune : chiffres globaux, par secteur et par quartier.
+
+| Volet | Adresses (`/api/v1/mairie/…`) |
+|---|---|
+| Tableau de bord | `dashboard/synthese/`, `dashboard/evolution/`, `dashboard/carte/` |
+| Signalements | `signalements/`, `signalements/{id}/`, `…/changer-statut/`, `…/repondre/`, `…/affecter-organisation/` |
+| Suggestions | `suggestions/`, `suggestions/{id}/`, `…/repondre/`, `…/pertinente/` |
+| Réalisations | `realisations/`, `realisations/{id}/` |
+| Organisations | `organisations/`, `organisations/{id}/`, `…/retirer-commune/`, `…/membres/` |
+| Référentiel | `secteurs/`, `quartiers/`, `arrondissements/`, `communes/` |
+
+Les agents et services d'une mairie connectée par IBDC sont gérés dans IBDC : un dossier n'y est
+confié, côté Voix du Citoyen, qu'à une organisation (`affecter-organisation`).
+
 ### Application tierce d'une mairie (IBDC)
 
 Une plateforme de mairie connectée (IBDC) n'utilise pas de jeton de connexion : elle envoie,
 **depuis son serveur uniquement**, la clé de son institution dans l'en-tête
 `X-Api-Key: vdc_…` (bouton **Authorize**, champ `cleApi`). Chaque clé correspond à une
-mairie (institution) et donc à une commune : les appels ont les droits d'un admin mairie de
-cette commune, avec le même cloisonnement. Une clé invalide ou désactivée donne
+mairie (institution) et donc à une commune : les appels, dans l'**espace mairie**, ont les
+droits d'un admin mairie de cette commune, avec le même cloisonnement. Une clé invalide ou désactivée donne
 `CLE_API_INVALIDE` (401). Les clés sont fournies par l'équipe Voix du Citoyen.
 Envoyez aussi le nom de l'agent qui agit dans `X-Agent` (texte encodé en URL, ex.
 `Rodrigue%20Ahouansou`) : il apparaît dans l'historique des dossiers. Pour rafraîchir sans tout
@@ -166,7 +192,8 @@ Une erreur 500 ne révèle jamais de détail technique.
   Demandes de code SMS (inscription + renvoi) : **5 par heure et par numéro** ;
   signalements : **10 par jour et par citoyen** ; envois de fichiers : **60 par heure**.
 - **Réalisations** : consultables **sans compte** (`GET /api/v1/realisations/`).
-- **Tableaux de bord** (`/api/v1/dashboard/…`) : mairie et organisations habilitées.
+- **Tableaux de bord** : `/api/v1/mairie/dashboard/…` pour la mairie, `/api/v1/dashboard/…` pour
+  les organisations habilitées et l'admin de la plateforme.
 - **Langue** : tous les messages sont en français.
 """
 

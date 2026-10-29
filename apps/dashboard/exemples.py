@@ -79,3 +79,9 @@ CARTE = {
          "statut": "EN_COURS", "latitude": "6.401500", "longitude": "2.341800"},
     ],
 }
+
+SYNTHESE_COMPLETE = {
+    "globales": SYNTHESE_MAIRIE,
+    "par_secteur": PAR_SECTEUR,
+    "par_quartier": PAR_QUARTIER,
+}

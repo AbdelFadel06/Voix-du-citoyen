@@ -128,10 +128,11 @@ class TestCreation:
 
     @pytest.mark.parametrize("role", [Utilisateur.Role.AGENT, Utilisateur.Role.ORGANISATION])
     def test_reserve_aux_citoyens(self, creer_utilisateur, client_connecte, secteur, role):
-        reponse = client_connecte(creer_utilisateur(role=role)).post(
+        reponse = client_connecte(creer_utilisateur(role=role), routes_generales=True).post(
             URL, {"titre": "T", "description": "D", "secteur": secteur.pk}, format="json"
         )
-        erreur(reponse, CodeErreur.PERMISSION_REFUSEE, 403)
+        code = CodeErreur.ESPACE_MAIRIE_REQUIS if role == Utilisateur.Role.AGENT else CodeErreur.PERMISSION_REFUSEE
+        erreur(reponse, code, 403)
 
 
 class TestSoutiens:
@@ -169,7 +170,9 @@ class TestSoutiens:
 
     @pytest.mark.parametrize("role", [Utilisateur.Role.AGENT, Utilisateur.Role.ORGANISATION])
     def test_reserve_aux_citoyens(self, suggestion, creer_utilisateur, client_connecte, role):
-        erreur(client_connecte(creer_utilisateur(role=role)).post(url(suggestion, "soutenir")), CodeErreur.PERMISSION_REFUSEE, 403)
+        client = client_connecte(creer_utilisateur(role=role), routes_generales=True)
+        code = CodeErreur.ESPACE_MAIRIE_REQUIS if role == Utilisateur.Role.AGENT else CodeErreur.PERMISSION_REFUSEE
+        erreur(client.post(url(suggestion, "soutenir")), code, 403)
 
     def test_un_soutien_par_citoyen_en_base(self, suggestion, voisin):
         Soutien.objects.create(suggestion=suggestion, citoyen=voisin)

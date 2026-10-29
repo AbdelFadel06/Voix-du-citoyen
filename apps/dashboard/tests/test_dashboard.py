@@ -20,6 +20,8 @@ from conftest import commune_de_test
 pytestmark = pytest.mark.django_db
 
 URLS = {nom: reverse(f"dashboard:{nom}") for nom in ("synthese", "par-secteur", "par-quartier", "evolution", "carte")}
+# Espace mairie : la synthèse regroupe chiffres globaux, par secteur et par quartier.
+URLS_MAIRIE = {nom: reverse(f"mairie:dashboard:{nom}") for nom in ("synthese", "evolution", "carte")}
 
 
 @pytest.fixture
@@ -91,7 +93,7 @@ def lire(client, nom, **params):
 
 class TestSynthese:
     def test_chiffres_vus_par_la_mairie(self, mairie):
-        donnees = lire(mairie, "synthese")
+        donnees = lire(mairie, "synthese")["globales"]
         assert donnees["signalements"] == {
             "total": 4,
             "par_statut": {"SOUMIS": 1, "RECU": 0, "EN_COURS": 1, "RESOLU": 1, "REJETE": 1, "DOUBLON": 0},
@@ -116,10 +118,10 @@ class TestSynthese:
         assert donnees["realisations"]["total"] == 1 and donnees["realisations"]["budget_total"] == 1000000
 
     def test_filtres(self, mairie, donnees):
-        assert lire(mairie, "synthese", secteur=donnees["eclairage"].pk)["signalements"]["total"] == 1
-        assert lire(mairie, "synthese", quartier=donnees["togoudo"].pk)["signalements"]["total"] == 3
+        assert lire(mairie, "synthese", secteur=donnees["eclairage"].pk)["globales"]["signalements"]["total"] == 1
+        assert lire(mairie, "synthese", quartier=donnees["togoudo"].pk)["globales"]["signalements"]["total"] == 3
         demain = (timezone.localdate() + timedelta(days=1)).isoformat()
-        vide = lire(mairie, "synthese", date_debut=demain)
+        vide = lire(mairie, "synthese", date_debut=demain)["globales"]
         assert vide["signalements"]["total"] == 0 and vide["signalements"]["taux_resolution"] is None
         assert vide["realisations"]["taux_avancement_moyen"] is None
 
@@ -130,7 +132,7 @@ class TestSynthese:
 
 class TestRepartitions:
     def test_par_secteur(self, mairie):
-        lignes = lire(mairie, "par-secteur")
+        lignes = lire(mairie, "synthese")["par_secteur"]
         assert [l["secteur"]["code"] for l in lignes] == ["VOIRIE", "ECLAIRAGE"]
         assert {k: v for k, v in lignes[0].items() if k != "secteur"} == {
             "signalements": 3, "signalements_ouverts": 2, "signalements_resolus": 1,
@@ -143,10 +145,10 @@ class TestRepartitions:
         assert eclairage["realisations"] == 0
 
     def test_par_quartier(self, mairie, donnees):
-        lignes = lire(mairie, "par-quartier")
+        lignes = lire(mairie, "synthese")["par_quartier"]
         assert [l["quartier"]["nom"] for l in lignes] == ["Togoudo", "Cococodji"]
         assert (lignes[0]["signalements"], lignes[0]["suggestions"], lignes[0]["realisations"]) == (3, 1, 1)
-        par_arrondissement = lire(mairie, "par-quartier", arrondissement=donnees["cococodji"].arrondissement_id)
+        par_arrondissement = lire(mairie, "synthese", arrondissement=donnees["cococodji"].arrondissement_id)["par_quartier"]
         assert [l["quartier"]["nom"] for l in par_arrondissement] == ["Cococodji"]
 
 
@@ -214,11 +216,11 @@ class TestAcces:
         lire(client_connecte(creer_utilisateur(role=Utilisateur.Role.ADMIN_MAIRIE)), nom)
 
 
-@pytest.mark.parametrize("nom", list(URLS))
+@pytest.mark.parametrize("nom", list(URLS_MAIRIE))
 def test_nombre_de_requetes_independant_du_volume(nom, mairie, donnees, televerser):
     def compter():
         with CaptureQueriesContext(connection) as requetes:
-            mairie.get(URLS[nom])
+            assert mairie.get(URLS_MAIRIE[nom]).status_code == 200
         return len(requetes)
 
     avant = compter()
@@ -229,3 +231,29 @@ def test_nombre_de_requetes_independant_du_volume(nom, mairie, donnees, televers
             medias_ids=[televerser(donnees["citoyen"]).id], titre="T", description_texte="D",
         )
     assert compter() == avant
+
+
+class TestRecapitulatifMairie:
+    def test_trois_blocs_coherents(self, mairie):
+        donnees = lire(mairie, "synthese")
+        assert set(donnees) == {"globales", "par_secteur", "par_quartier"}
+        total = donnees["globales"]["signalements"]["total"]
+        assert sum(l["signalements"] for l in donnees["par_secteur"]) == total
+        assert sum(l["signalements"] for l in donnees["par_quartier"]) == total
+
+    def test_le_parametre_commune_n_existe_pas(self, mairie):
+        from apps.territoire.models import Commune
+
+        autre = Commune.objects.create(
+            nom="Cotonou", code="COT", departement="Littoral",
+            lat_min=Decimal("6"), lat_max=Decimal("7"), lng_min=Decimal("2"), lng_max=Decimal("3"),
+        )
+        # La commune vient du jeton : un ?commune= d'une autre commune ne change rien.
+        assert lire(mairie, "synthese", commune=autre.pk)["globales"]["signalements"]["total"] == 4
+
+    @pytest.mark.parametrize("nom", list(URLS_MAIRIE))
+    def test_reserve_a_la_mairie(self, nom, organisation, creer_utilisateur, client_connecte):
+        plateforme = client_connecte(creer_utilisateur(role=Utilisateur.Role.ADMIN_MAIRIE))
+        for client in (organisation, plateforme):
+            reponse = client.get(URLS_MAIRIE[nom])
+            assert reponse.status_code == 403 and reponse.json()["erreur"]["code"] == CodeErreur.PERMISSION_REFUSEE
