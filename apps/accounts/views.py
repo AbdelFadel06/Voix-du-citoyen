@@ -1,9 +1,10 @@
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.generics import RetrieveUpdateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.core.codes_erreur import CodeErreur
@@ -20,7 +21,7 @@ from apps.core.schema import (
 )
 from apps.core.throttling import ThrottleOTP
 
-from . import exemples, services
+from . import cookies, exemples, services
 from .serializers import (
     ChangementMotDePasseSerializer,
     ConnexionSerializer,
@@ -54,6 +55,23 @@ EXEMPLE_TELEPHONE_INVALIDE = exemple_erreur(
     details={"telephone": ["Saisissez un numéro de téléphone valide."]},
     nom="Téléphone invalide",
 )
+
+
+# Client web : `refresh` en cookie httpOnly (apps/accounts/cookies.py).
+X_CLIENT = OpenApiParameter(
+    "X-Client",
+    str,
+    OpenApiParameter.HEADER,
+    required=False,
+    enum=["web"],
+    description="`web` pour le site web : le jeton `refresh` est posé dans un cookie `httpOnly` "
+    "(et relu dans ce cookie) au lieu d'être dans le JSON. À omettre pour le mobile.",
+)
+MODE_WEB = """
+**Site web (`X-Client: web`)** : le jeton `refresh` n'est **pas** dans la réponse JSON ; il est
+posé dans un cookie `httpOnly` (illisible par le JavaScript, limité à `/api/v1/auth/`). Appeler
+avec `credentials: "include"`. Sans cet en-tête (mobile, Swagger, Postman), rien ne change.
+"""
 
 
 def donnees_jetons(utilisateur):
@@ -189,7 +207,7 @@ vérifié et **le citoyen est connecté directement** : la réponse contient les
         serializer = VerificationOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         utilisateur = services.verifier_inscription(**serializer.validated_data)
-        return reponse_succes(donnees_jetons(utilisateur), MESSAGE_VERIFICATION)
+        return cookies.reponse_jetons(request, donnees_jetons(utilisateur), MESSAGE_VERIFICATION)
 
 
 class RenvoiOTPView(VuePublique):
@@ -252,10 +270,11 @@ L'identifiant dépend du type de compte — envoyer **l'un ou l'autre**, jamais 
 - `ORGANISATION_NON_HABILITEE` (403) : organisation suspendue ou habilitation expirée.
 
 Les comptes agents et organisations, créés par la mairie, n'ont pas besoin de code SMS.
-
+{MODE_WEB}
 **Public** : aucun jeton requis.
-""",
+""".replace("{MODE_WEB}", MODE_WEB),
         auth=[],
+        parameters=[X_CLIENT],
         request=ConnexionSerializer,
         responses={200: enveloppe(JetonsSerializer), **erreurs(400, 401, 403)},
         examples=[
@@ -298,7 +317,7 @@ Les comptes agents et organisations, créés par la mairie, n'ont pas besoin de 
             telephone=donnees["telephone"].as_e164 if donnees.get("telephone") else None,
             email=donnees.get("email"),
         )
-        return reponse_succes(donnees_jetons(utilisateur), MESSAGE_CONNEXION)
+        return cookies.reponse_jetons(request, donnees_jetons(utilisateur), MESSAGE_CONNEXION)
 
 
 class DemandeReinitialisationView(VuePublique):
@@ -434,9 +453,10 @@ La personne connectée choisit un nouveau mot de passe, en donnant l'actuel.
   membre d'une organisation).
 
 Mot de passe oublié (sans être connecté) : `POST /auth/password/reset/`.
-
+{MODE_WEB}
 **Connecté** : tous les rôles.
-""",
+""".replace("{MODE_WEB}", MODE_WEB),
+        parameters=[X_CLIENT],
         request=ChangementMotDePasseSerializer,
         responses={200: enveloppe(JetonsSerializer), **erreurs(400, 401)},
         examples=[
@@ -461,7 +481,7 @@ Mot de passe oublié (sans être connecté) : `POST /auth/password/reset/`.
         entree = ChangementMotDePasseSerializer(data=request.data)
         entree.is_valid(raise_exception=True)
         utilisateur = services.changer_mot_de_passe(request.user, **entree.validated_data)
-        return reponse_succes(donnees_jetons(utilisateur), MESSAGE_CHANGEMENT)
+        return cookies.reponse_jetons(request, donnees_jetons(utilisateur), MESSAGE_CHANGEMENT)
 
 
 @extend_schema_view(
@@ -476,16 +496,24 @@ remplacer celui qu'elle a enregistré.
 À appeler quand une requête répond `JETON_INVALIDE`. Si le rafraîchissement échoue lui
 aussi (`JETON_INVALIDE`), l'utilisateur doit se reconnecter avec `/auth/login/`.
 
+**Site web (`X-Client: web`)** : corps vide `{}` ; le `refresh` est lu dans le cookie `httpOnly`
+et le nouveau y est reposé (la réponse ne contient que `access`). À l'ouverture du site, cet
+appel reconnecte l'utilisateur sans mot de passe si son cookie est encore valable. Le cookie
+n'est **jamais** lu sans l'en-tête `X-Client: web` (protection contre les requêtes forgées).
+
 **Public** : aucun jeton `access` requis.
 """,
         auth=[],
+        parameters=[X_CLIENT],
         request=RafraichissementSerializer,
         responses={200: enveloppe(JetonsRafraichisSerializer), **erreurs(400, 401)},
         examples=[
             exemple_requete("Jeton de rafraîchissement", {"refresh": exemples.REFRESH}),
+            exemple_requete("Site web (refresh dans le cookie)", {}),
             exemple_succes(
                 "Nouveaux jetons", {"access": exemples.ACCESS, "refresh": exemples.REFRESH}
             ),
+            exemple_succes("Site web : nouvel access (refresh reposé dans le cookie)", {"access": exemples.ACCESS}),
             exemple_erreur(
                 CodeErreur.JETON_INVALIDE,
                 description="Jeton expiré, déjà utilisé ou invalidé à la déconnexion.",
@@ -499,7 +527,14 @@ aussi (`JETON_INVALIDE`), l'utilisateur doit se reconnecter avec `/auth/login/`.
     )
 )
 class RafraichissementView(TokenRefreshView):
-    pass
+    def post(self, request, *args, **kwargs):
+        refresh = request.data.get("refresh") or cookies.refresh_du_cookie(request)
+        serializer = self.get_serializer(data={"refresh": refresh} if refresh else {})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError as erreur:
+            raise InvalidToken(erreur.args[0])
+        return cookies.reponse_jetons(request, serializer.validated_data)
 
 
 class DeconnexionView(APIView):
@@ -516,10 +551,14 @@ l'application doit le supprimer de son côté.
 
 Le jeton `refresh` doit appartenir à l'utilisateur connecté (sinon `PERMISSION_REFUSEE`).
 
+**Site web (`X-Client: web`)** : `refresh` peut être omis, il est lu dans le cookie `httpOnly`,
+qui est effacé par la réponse.
+
 **Réponse** : 204, sans contenu.
 
 **Connecté** : tous les rôles.
 """,
+        parameters=[X_CLIENT],
         request=DeconnexionSerializer,
         responses={204: None, **erreurs(400, 401, 403)},
         examples=[
@@ -543,14 +582,18 @@ Le jeton `refresh` doit appartenir à l'utilisateur connecté (sinon `PERMISSION
         ],
     )
     def post(self, request):
-        serializer = DeconnexionSerializer(data=request.data)
+        donnees = {cle: valeur for cle, valeur in request.data.items() if cle in ("refresh", "token_fcm")}
+        if "refresh" not in donnees and cookies.refresh_du_cookie(request):
+            donnees["refresh"] = cookies.refresh_du_cookie(request)
+        serializer = DeconnexionSerializer(data=donnees)
         serializer.is_valid(raise_exception=True)
         services.deconnecter(request.user, serializer.validated_data["refresh"])
         if serializer.validated_data.get("token_fcm"):
             from apps.notifications.services import desactiver_appareil
 
             desactiver_appareil(request.user, serializer.validated_data["token_fcm"])
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        reponse = Response(status=status.HTTP_204_NO_CONTENT)
+        return cookies.effacer(reponse) if cookies.mode_cookie(request) else reponse
 
 
 @extend_schema_view(
@@ -578,16 +621,21 @@ Renvoie le profil de l'utilisateur connecté, quel que soit son rôle.
         description="""
 Modifie **uniquement** les champs envoyés (mise à jour partielle).
 
-Champs modifiables : `nom`, `prenoms`, `email`, `quartier_residence`.
+Champs modifiables : `nom`, `prenoms`, `email`, `commune` (citoyens), `quartier_residence`.
 Les autres champs (`telephone`, `role`…) sont ignorés s'ils sont envoyés.
 - `email` : `null` ou `""` efface l'adresse.
-- `quartier_residence` : identifiant d'un quartier **actif**, ou `null`.
+- **Zone de résidence** (citoyens) : `commune` (`GET /communes/`) et `quartier_residence`
+  (identifiant d'un quartier **actif** de cette commune, `GET /quartiers/`, ou `null`). Changer
+  de commune sans indiquer de quartier efface l'ancien quartier. Les nouveaux signalements et
+  suggestions prennent la nouvelle commune ; les dossiers déjà envoyés gardent la leur. Pour la
+  mairie, la commune n'est pas modifiable ici.
 
 **Connecté** : tous les rôles.
 """,
         responses={200: enveloppe(UtilisateurSerializer), **erreurs(400, 401, 403)},
         examples=[
             exemple_requete("Changer de quartier", {"quartier_residence": 15}),
+            exemple_requete("Déménager dans une autre commune", {"commune": 2, "quartier_residence": 41}),
             exemple_requete(
                 "Corriger le nom et effacer l'e-mail", {"nom": "Hounkpatin-Dossa", "email": None}
             ),

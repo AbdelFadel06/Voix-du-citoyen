@@ -309,25 +309,34 @@ class JetonsSerializer(serializers.Serializer):
         "`Authorization: Bearer <access>`."
     )
     refresh = serializers.CharField(
+        required=False,
         help_text="Jeton de rafraîchissement, valable 30 jours. À conserver de façon sécurisée "
-        "pour obtenir de nouveaux jetons avec `/auth/refresh/`."
+        "pour obtenir de nouveaux jetons avec `/auth/refresh/`. Absent pour le site web "
+        "(`X-Client: web`) : il est dans un cookie `httpOnly`.",
     )
     utilisateur = UtilisateurSerializer(help_text="Profil de l'utilisateur connecté.")
 
 
 class RafraichissementSerializer(serializers.Serializer):
-    refresh = serializers.CharField(help_text="Dernier jeton `refresh` reçu.")
+    refresh = serializers.CharField(
+        required=False,
+        help_text="Dernier jeton `refresh` reçu. À omettre pour le site web (`X-Client: web`) : lu dans le cookie.",
+    )
 
 
 class JetonsRafraichisSerializer(serializers.Serializer):
     access = serializers.CharField(help_text="Nouveau jeton d'accès, valable 30 minutes.")
     refresh = serializers.CharField(
-        help_text="Nouveau jeton de rafraîchissement : il remplace l'ancien, devenu inutilisable."
+        required=False,
+        help_text="Nouveau jeton de rafraîchissement : il remplace l'ancien, devenu inutilisable. "
+        "Absent pour le site web (`X-Client: web`) : reposé dans le cookie `httpOnly`.",
     )
 
 
 class DeconnexionSerializer(serializers.Serializer):
-    refresh = serializers.CharField(help_text="Jeton `refresh` à invalider.")
+    refresh = serializers.CharField(
+        help_text="Jeton `refresh` à invalider. Site web (`X-Client: web`) : peut être omis, il est lu dans le cookie."
+    )
     token_fcm = serializers.CharField(
         required=False,
         allow_blank=True,

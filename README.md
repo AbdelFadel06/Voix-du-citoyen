@@ -249,6 +249,15 @@ Le guide complet pour l'équipe IBDC, page par page, est dans `docs/integration_
 Les citoyens (mobile), les organisations (web des ONG) et l'admin de la plateforme gardent les
 adresses `/api/v1/…` sans `/mairie/`.
 
+### 3.5 Site web : jeton `refresh` en cookie
+
+Le site web des organisations envoie `X-Client: web` (et `credentials: "include"`) sur
+`/auth/login/`, `/auth/refresh/`, `/auth/logout/` et `/auth/password/change/` : le `refresh` est
+alors dans un cookie `httpOnly`, plus dans le JSON. Sans cet en-tête (mobile, Swagger), rien ne
+change. Pour essayer dans Postman : ajouter l'en-tête `X-Client: web` ; Postman garde le cookie
+et le renvoie à `/auth/refresh/` (corps `{}`). En production, `CORS_ALLOWED_ORIGINS` doit
+contenir l'adresse du site web, sur le même domaine principal que l'API.
+
 Pour appeler les routes protégées dans Swagger : `POST /auth/login/` (`email` + `password`
 pour la mairie et les organisations, `telephone` + `password` pour un citoyen), copier le
 jeton `access`, cliquer sur **Authorize** et le coller.

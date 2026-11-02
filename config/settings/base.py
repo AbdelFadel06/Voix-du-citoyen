@@ -326,6 +326,25 @@ EST_PRODUCTION = False
 # Le mobile n'est pas concerné par CORS ; seul le client web l'est.
 # En dev tout est autorisé (voir dev.py) ; les origines de prod sont dans prod.py.
 CORS_ALLOWED_ORIGINS = []
+# Le web envoie son cookie `refresh` (credentials) et l'en-tête X-Client (apps/accounts/cookies.py).
+CORS_ALLOW_CREDENTIALS = True
+from corsheaders.defaults import default_headers  # noqa: E402
+
+CORS_ALLOW_HEADERS = (*default_headers, "x-client")
+
+# ---------------------------------------------------------------------------
+# Cookie `refresh` du client web (en-tête X-Client: web, apps/accounts/cookies.py)
+# ---------------------------------------------------------------------------
+
+REFRESH_COOKIE_NOM = env("REFRESH_COOKIE_NOM", default="vdc_refresh")
+# Seules les adresses d'authentification reçoivent le cookie.
+REFRESH_COOKIE_CHEMIN = "/api/v1/auth/"
+# Domaine partagé par le site web et l'API (ex. `.piecitizenvoice.com`) ; vide = domaine de l'API.
+REFRESH_COOKIE_DOMAINE = env("REFRESH_COOKIE_DOMAINE", default=None) or None
+# `Lax` si le site et l'API sont sur le même domaine principal ; `None` (avec Secure) s'ils sont
+# sur des domaines différents, au prix d'une protection moindre.
+REFRESH_COOKIE_SAMESITE = env("REFRESH_COOKIE_SAMESITE", default="Lax")
+REFRESH_COOKIE_SECURE = env.bool("REFRESH_COOKIE_SECURE", default=False)
 
 # ---------------------------------------------------------------------------
 # Journalisation

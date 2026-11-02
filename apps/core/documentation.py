@@ -41,6 +41,23 @@ l'utilisateur connecté.
    il faut donc toujours conserver le dernier reçu.
 4. `POST /api/v1/auth/logout/` invalide le jeton `refresh` à la déconnexion.
 
+**Mobile** : ranger les jetons dans le stockage sécurisé du téléphone (Keychain / Keystore).
+
+### Site web : jeton `refresh` en cookie `httpOnly`
+
+Le site web (organisations) ne garde **pas** le `refresh` lui-même : il envoie l'en-tête
+`X-Client: web` et `credentials: "include"` sur `/auth/login/`, `/auth/refresh/`,
+`/auth/logout/` et `/auth/password/change/`. L'API pose alors le `refresh` dans un cookie
+`httpOnly` (illisible par le JavaScript, envoyé seulement aux adresses `/api/v1/auth/`) et ne
+renvoie que l'`access` dans le JSON.
+
+- Garder l'`access` **en mémoire** (jamais dans localStorage) et l'envoyer en `Authorization: Bearer`.
+- À l'ouverture du site et quand l'API répond `JETON_INVALIDE` : `POST /auth/refresh/` avec `{}`.
+  Succès = nouvel `access` (et nouveau cookie) ; `JETON_INVALIDE` = afficher la connexion.
+- Faire **un seul** rafraîchissement à la fois (rotation : deux appels simultanés déconnectent).
+- `POST /auth/logout/` avec `{}` invalide le cookie et l'efface.
+- Sans `X-Client: web` (mobile, Swagger, Postman), les jetons restent dans le JSON.
+
 ### Envoyer un signalement avec photos et enregistrement vocal
 
 1. `POST /api/v1/medias/` pour **chaque** fichier, un par requête (`multipart/form-data`) :
