@@ -103,14 +103,14 @@ def test_mobile_et_swagger_inchanges(api_client, creer_utilisateur):
 
 def test_cors_autorise_le_cookie_et_l_en_tete(api_client, settings):
     settings.CORS_ALLOW_ALL_ORIGINS = False
-    settings.CORS_ALLOWED_ORIGINS = ["https://ong.piecitizenvoice.com"]
+    settings.CORS_ALLOWED_ORIGINS = ["https://osc.piecitizenvoice.com"]
     reponse = api_client.options(
         URL_REFRESH,
-        HTTP_ORIGIN="https://ong.piecitizenvoice.com",
+        HTTP_ORIGIN="https://osc.piecitizenvoice.com",
         HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
         HTTP_ACCESS_CONTROL_REQUEST_HEADERS="content-type, x-client",
     )
-    assert reponse["access-control-allow-origin"] == "https://ong.piecitizenvoice.com"
+    assert reponse["access-control-allow-origin"] == "https://osc.piecitizenvoice.com"
     assert reponse["access-control-allow-credentials"] == "true"
     assert "x-client" in reponse["access-control-allow-headers"]
     # Un site non autorisé n'obtient pas l'accord : son navigateur n'enverra pas X-Client.
