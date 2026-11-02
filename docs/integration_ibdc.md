@@ -174,12 +174,17 @@ GET /api/v1/mairie/dashboard/synthese/?secteur=1,3&quartier=12,15     → deux s
 
 ```http
 GET /api/v1/mairie/signalements/?statut=SOUMIS&secteur=3&tri=-cree_le&page=1&taille=20
+GET /api/v1/mairie/signalements/?statut=SOUMIS,RECU&secteur=1,3&quartier=12,15     → plusieurs valeurs
 ```
+
+`statut`, `secteur` et `quartier` acceptent **une ou plusieurs valeurs** : paramètre répété
+(`secteur=1&secteur=3`) ou valeurs séparées par des virgules (`secteur=1,3`). C'est la même écriture
+que pour les tableaux de bord et les listes de suggestions et de réalisations.
 
 | Filtre | Valeurs |
 |---|---|
-| `statut` | `SOUMIS`, `RECU`, `EN_COURS`, `RESOLU`, `REJETE`, `DOUBLON` |
-| `secteur`, `quartier` | identifiants (voir § 9) |
+| `statut` | `SOUMIS`, `RECU`, `EN_COURS`, `RESOLU`, `REJETE`, `DOUBLON` (un ou plusieurs) |
+| `secteur`, `quartier` | identifiants, un ou plusieurs (voir § 9) |
 | `date_debut`, `date_fin` | date d'envoi (`AAAA-MM-JJ`) |
 | `organisation` / `pris_en_charge` | dossiers d'une ONG / `true` pris en charge par une ONG, `false` aucune |
 | `recherche` | référence, titre, description, repère |
@@ -253,8 +258,8 @@ une autre `organisation`. Dossier clos : `409 SIGNALEMENT_CLOTURE`.
 GET /api/v1/mairie/suggestions/?tri=-nb_soutiens&secteur=4
 ```
 
-Filtres : `secteur`, `quartier`, `date_debut`, `date_fin`, `est_pertinente`, `recherche`,
-`tri` (`cree_le`, `maj_le`, `nb_soutiens`, `reference`).
+Filtres : `secteur`, `quartier` (un ou plusieurs : `secteur=1,4`), `date_debut`, `date_fin`,
+`est_pertinente`, `recherche`, `tri` (`cree_le`, `maj_le`, `nb_soutiens`, `reference`).
 
 Champs : `id`, `reference` (`SUG-2026-00042`), `titre`, `secteur`, `quartier` (`null` = toute la
 commune), `nb_soutiens`, `medias`, `a_reponse`, `est_pertinente`, `cree_le`.
@@ -294,6 +299,7 @@ GET /api/v1/mairie/realisations/?par_la_mairie=true&publie=false     → uniquem
 ```
 
 `par_la_mairie=false` donne celles des ONG (publiées) ; `organisation=<id>` celles d'une ONG.
+`statut`, `secteur` et `quartier` acceptent plusieurs valeurs (`statut=PLANIFIEE,EN_COURS`).
 Champs : `id`, `reference` (`REA-2026-00004`), `titre`, `secteur`, `statut` (`PLANIFIEE`,
 `EN_COURS`, `TERMINEE`, `SUSPENDUE`), `taux_avancement`, `quartiers`, dates prévues,
 `couverture` (miniature), `nb_medias`, `organisation` (`null` = mairie), `publie`,

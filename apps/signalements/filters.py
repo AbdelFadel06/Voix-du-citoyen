@@ -1,16 +1,22 @@
 import django_filters
 
 from apps.core.communes import FiltreCommune
+from apps.core.filters import FiltreChoix, FiltreIdentifiants
 
 from .models import Signalement
 
 
 class SignalementFilter(django_filters.FilterSet):
-    statut = django_filters.ChoiceFilter(
-        choices=Signalement.Statut.choices, help_text="Ne renvoyer que les signalements à ce statut."
+    statut = FiltreChoix(
+        choices=Signalement.Statut.choices,
+        help_text="Ne renvoyer que les signalements à ce(s) statut(s). Une ou plusieurs valeurs : `statut=SOUMIS&statut=RECU` ou `statut=SOUMIS,RECU`.",
     )
-    secteur = django_filters.NumberFilter(field_name="secteur", help_text="Identifiant du secteur.")
-    quartier = django_filters.NumberFilter(field_name="quartier", help_text="Identifiant du quartier.")
+    secteur = FiltreIdentifiants(
+        field_name="secteur", help_text="Identifiant du secteur. Une ou plusieurs valeurs : `secteur=1&secteur=3` ou `secteur=1,3`."
+    )
+    quartier = FiltreIdentifiants(
+        field_name="quartier", help_text="Identifiant du quartier. Une ou plusieurs valeurs : `quartier=12&quartier=15` ou `quartier=12,15`."
+    )
     date_debut = django_filters.DateFilter(
         field_name="cree_le", lookup_expr="date__gte", help_text="Envoyés à partir de ce jour (AAAA-MM-JJ)."
     )

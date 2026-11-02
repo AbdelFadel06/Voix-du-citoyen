@@ -1,6 +1,7 @@
 import django_filters
 
 from apps.core.communes import FiltreCommune
+from apps.core.filters import FiltreChoix, FiltreIdentifiants
 from apps.accounts.models import Utilisateur
 from apps.core.permissions import est_personnel_mairie
 
@@ -8,12 +9,17 @@ from .models import Realisation
 
 
 class RealisationFilter(django_filters.FilterSet):
-    statut = django_filters.ChoiceFilter(
-        choices=Realisation.Statut.choices, help_text="Ne renvoyer que les réalisations à ce statut."
+    statut = FiltreChoix(
+        choices=Realisation.Statut.choices,
+        help_text="Ne renvoyer que les réalisations à ce(s) statut(s). Une ou plusieurs valeurs : `statut=PLANIFIEE&statut=EN_COURS` ou `statut=PLANIFIEE,EN_COURS`.",
     )
-    secteur = django_filters.NumberFilter(field_name="secteur", help_text="Identifiant du secteur.")
-    quartier = django_filters.NumberFilter(
-        field_name="quartiers", help_text="Identifiant d'un quartier concerné par la réalisation."
+    secteur = FiltreIdentifiants(
+        field_name="secteur", help_text="Identifiant du secteur. Une ou plusieurs valeurs : `secteur=1&secteur=3` ou `secteur=1,3`."
+    )
+    quartier = FiltreIdentifiants(
+        field_name="quartiers",
+        distinct=True,  # une réalisation dans deux des quartiers demandés n'apparaît qu'une fois
+        help_text="Identifiant d'un quartier concerné par la réalisation. Une ou plusieurs valeurs : `quartier=12&quartier=15` ou `quartier=12,15`.",
     )
     date_debut = django_filters.DateFilter(
         field_name="cree_le", lookup_expr="date__gte", help_text="Créées à partir de ce jour (AAAA-MM-JJ)."
