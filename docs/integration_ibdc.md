@@ -96,7 +96,7 @@ Toutes commencent par `https://api.piecitizenvoice.com/api/v1/mairie/` et s'appe
 | | POST | `signalements/{id}/affecter-organisation/` | Confier le dossier à une ONG, la remplacer ou la retirer (§ 5) |
 | Suggestions | GET | `suggestions/` · `suggestions/{id}/` | Liste filtrable, détail (§ 6) |
 | | POST | `suggestions/{id}/repondre/` | Réponse officielle ou note interne (§ 6) |
-| | POST, DELETE | `suggestions/{id}/pertinente/` | Marquer / retirer « pertinente » (§ 7) |
+| | POST, DELETE | `suggestions/{id}/pertinente/` | Marquer pertinente / non pertinente, ou retirer l'évaluation (§ 7) |
 | Réalisations | GET, POST | `realisations/` | Liste (brouillons compris), création (§ 8) |
 | | GET, PATCH | `realisations/{id}/` | Détail, mise à jour, publication (§ 8) |
 | Organisations (ONG) | GET, POST | `organisations/` | Liste avec statistiques, enregistrement (§ 10) |
@@ -126,7 +126,7 @@ Tous les chiffres sont ceux de la commune de la clé (aucun paramètre `commune`
 
 | Bloc de la page | Appel | Contenu |
 |---|---|---|
-| **Récapitulatif complet** : chiffres clés, par secteur, par quartier | `GET /api/v1/mairie/dashboard/synthese/` (+ `arrondissement`, qui ne limite que `par_quartier`) | `globales` · `par_secteur` · `par_quartier` (détail ci-dessous) |
+| **Récapitulatif complet** : chiffres clés, par secteur, par quartier, réalisations par secteur | `GET /api/v1/mairie/dashboard/synthese/` (+ `arrondissement`, qui ne limite que `par_quartier`) | `globales` · `par_secteur` · `par_quartier` · `realisations_par_secteur` (détail ci-dessous) |
 | Évolution dans le temps (courbe) | `GET /api/v1/mairie/dashboard/evolution/?periode=jour\|semaine\|mois` | `points` : `periode` (date), `signalements_crees`, `signalements_resolus`, `suggestions_creees` ; série sans trou (0 si rien) |
 | Carte | `GET /api/v1/mairie/dashboard/carte/` (+ `statut`) | Points GPS des signalements (2 000 max, `signalements_tronques`), nombre de signalements par quartier (au centre du quartier), réalisations localisées |
 | Organisations partenaires (ONG) | `GET /api/v1/mairie/organisations/` | Pour chaque ONG de la commune : périmètre, comptes actifs et `statistiques` (signalements, en attente, en cours, résolus, taux et délai de résolution, dossiers pris en charge, réalisations publiées) |
@@ -135,13 +135,18 @@ Contenu du récapitulatif :
 
 1. **`globales`** — `signalements` : `total`, `par_statut` (un compteur par statut), `ouverts`,
    `resolus`, `taux_resolution` (%), `delai_moyen_resolution_jours` · `suggestions` : `total`,
-   `nb_soutiens`, `pertinentes` · `realisations` : `total`, `par_statut`, `budget_total` (FCFA),
+   `nb_soutiens`, `pertinentes`, `non_pertinentes`, `non_evaluees` · `realisations` : `total`,
+   `par_statut`, `budget_total` (FCFA),
    `taux_avancement_moyen`, `brouillons` ;
 2. **`par_secteur`** — une ligne par secteur, du plus grand nombre de signalements au plus petit :
    `secteur {id, nom, code, couleur}`, `signalements`, `signalements_ouverts`,
    `signalements_resolus`, `taux_resolution`, `suggestions`, `realisations` ;
 3. **`par_quartier`** — une ligne par quartier ayant au moins un dossier : `quartier {id, nom,
-   arrondissement}` et les mêmes compteurs.
+   arrondissement}` et les mêmes compteurs ;
+4. **`realisations_par_secteur`** — pour chaque secteur qui a des réalisations, du plus grand
+   nombre au plus petit : `secteur`, `total`, `par_statut` (`PLANIFIEE`, `EN_COURS`, `TERMINEE`,
+   `SUSPENDUE`), `budget_total` (FCFA), `taux_avancement_moyen` (%), `brouillons`. La somme des
+   lignes donne `globales.realisations`.
 
 Exemple :
 
@@ -155,7 +160,7 @@ GET /api/v1/mairie/dashboard/synthese/?secteur=1,3&quartier=12,15     → deux s
   "globales": {
     "signalements": { "total": 128, "par_statut": { "SOUMIS": 12, "RECU": 18, "EN_COURS": 25, "RESOLU": 61, "REJETE": 8, "DOUBLON": 4 },
                       "ouverts": 55, "resolus": 61, "taux_resolution": 47.7, "delai_moyen_resolution_jours": 9.4 },
-    "suggestions": { "total": 88, "nb_soutiens": 1742, "pertinentes": 14 },
+    "suggestions": { "total": 88, "nb_soutiens": 1742, "pertinentes": 14, "non_pertinentes": 9, "non_evaluees": 65 },
     "realisations": { "total": 31, "par_statut": { "PLANIFIEE": 6, "EN_COURS": 9, "TERMINEE": 15, "SUSPENDUE": 1 },
                       "budget_total": 845000000, "taux_avancement_moyen": 62.5, "brouillons": 4 } },
   "par_secteur": [
@@ -165,7 +170,11 @@ GET /api/v1/mairie/dashboard/synthese/?secteur=1,3&quartier=12,15     → deux s
   "par_quartier": [
     { "quartier": { "id": 12, "nom": "Banikanni", "arrondissement": "1er arrondissement" },
       "signalements": 23, "signalements_ouverts": 9, "signalements_resolus": 12, "taux_resolution": 52.2,
-      "suggestions": 6, "realisations": 3 } ] } }
+      "suggestions": 6, "realisations": 3 } ],
+  "realisations_par_secteur": [
+    { "secteur": { "id": 1, "nom": "Voirie", "code": "VOIRIE", "couleur": "#F57C00" },
+      "total": 12, "par_statut": { "PLANIFIEE": 3, "EN_COURS": 4, "TERMINEE": 5, "SUSPENDUE": 0 },
+      "budget_total": 845000000, "taux_avancement_moyen": 61.7, "brouillons": 2 } ] } }
 ```
 
 ---
@@ -259,7 +268,8 @@ GET /api/v1/mairie/suggestions/?tri=-nb_soutiens&secteur=4
 ```
 
 Filtres : `secteur`, `quartier` (un ou plusieurs : `secteur=1,4`), `date_debut`, `date_fin`,
-`est_pertinente`, `recherche`, `tri` (`cree_le`, `maj_le`, `nb_soutiens`, `reference`).
+`est_pertinente` (`true`, `false` ou `null` = pas encore évaluée), `recherche`, `tri` (`cree_le`,
+`maj_le`, `nb_soutiens`, `reference`).
 
 Champs : `id`, `reference` (`SUG-2026-00042`), `titre`, `secteur`, `quartier` (`null` = toute la
 commune), `nb_soutiens`, `medias`, `a_reponse`, `est_pertinente`, `cree_le`.
@@ -276,16 +286,21 @@ POST /api/v1/mairie/suggestions/{id}/repondre/
 
 ---
 
-## 7. Marquer une suggestion comme pertinente
+## 7. Évaluer une suggestion (pertinente ou non)
+
+À son arrivée, une suggestion n'est **pas encore évaluée** (`est_pertinente: null`). La mairie la
+marque ensuite pertinente ou non pertinente :
 
 ```http
-POST   /api/v1/mairie/suggestions/{id}/pertinente/     → marquer
-DELETE /api/v1/mairie/suggestions/{id}/pertinente/     → retirer la marque
+POST   /api/v1/mairie/suggestions/{id}/pertinente/                              → pertinente (corps vide accepté)
+POST   /api/v1/mairie/suggestions/{id}/pertinente/  { "est_pertinente": false } → non pertinente
+DELETE /api/v1/mairie/suggestions/{id}/pertinente/                              → retirer l'évaluation
 ```
 
-Réponse : `{ "est_pertinente": true|false }`. Renvoyer la même requête est sans effet. Retrouver
-les suggestions retenues : `GET /api/v1/mairie/suggestions/?est_pertinente=true`. Cette marque n'est
-**jamais** montrée aux citoyens.
+Réponse : `{ "est_pertinente": true | false | null }`. Renvoyer la même requête est sans effet.
+Retrouver les suggestions : `GET /api/v1/mairie/suggestions/?est_pertinente=true` (pertinentes),
+`false` (non pertinentes) ou `null` (pas encore évaluées). Cette évaluation n'est **jamais** montrée
+aux citoyens.
 
 ---
 

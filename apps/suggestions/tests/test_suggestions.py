@@ -205,25 +205,38 @@ def test_soutiens_simultanes_comptes_exactement(creer_utilisateur, secteur):
 
 
 class TestPertinence:
-    def test_cocher_puis_decocher(self, suggestion, agent, client_connecte):
+    def test_pas_encore_evaluee_a_la_creation(self, suggestion, agent, client_connecte):
+        assert suggestion.est_pertinente is None
+        assert client_connecte(agent).get(url(suggestion)).json()["donnees"]["est_pertinente"] is None
+
+    def test_pertinente_non_pertinente_puis_retirer(self, suggestion, agent, client_connecte):
         client = client_connecte(agent)
-        corps = ok(client.post(url(suggestion, "pertinente")))
+        corps = ok(client.post(url(suggestion, "pertinente")))  # corps vide = pertinente
         assert corps["donnees"] == {"est_pertinente": True}
         assert corps["message"] == "Suggestion marquée comme pertinente."
+
+        corps = ok(client.post(url(suggestion, "pertinente"), {"est_pertinente": False}, format="json"))
+        assert corps["donnees"] == {"est_pertinente": False}
+        assert corps["message"] == "Suggestion marquée comme non pertinente."
         suggestion.refresh_from_db()
-        assert suggestion.est_pertinente
+        assert suggestion.est_pertinente is False
 
         corps = ok(client.delete(url(suggestion, "pertinente")))
-        assert corps["donnees"] == {"est_pertinente": False}
+        assert corps["donnees"] == {"est_pertinente": None}
         suggestion.refresh_from_db()
-        assert not suggestion.est_pertinente
+        assert suggestion.est_pertinente is None
 
     def test_sans_effet_si_deja_dans_l_etat_demande(self, suggestion, agent, client_connecte):
         client = client_connecte(agent)
-        ok(client.post(url(suggestion, "pertinente")))
-        assert ok(client.post(url(suggestion, "pertinente")))["donnees"] == {"est_pertinente": True}
+        for corps, attendu in (({}, True), ({"est_pertinente": False}, False)):
+            ok(client.post(url(suggestion, "pertinente"), corps, format="json"))
+            assert ok(client.post(url(suggestion, "pertinente"), corps, format="json"))["donnees"] == {"est_pertinente": attendu}
         ok(client.delete(url(suggestion, "pertinente")))
-        assert ok(client.delete(url(suggestion, "pertinente")))["donnees"] == {"est_pertinente": False}
+        assert ok(client.delete(url(suggestion, "pertinente")))["donnees"] == {"est_pertinente": None}
+
+    def test_valeur_invalide(self, suggestion, agent, client_connecte):
+        reponse = client_connecte(agent).post(url(suggestion, "pertinente"), {"est_pertinente": "peut-etre"}, format="json")
+        erreur(reponse, CodeErreur.VALIDATION_ERREUR, 400)
 
     def test_admin_mairie_autorise(self, suggestion, creer_utilisateur, client_connecte):
         ok(client_connecte(creer_utilisateur(role=Utilisateur.Role.ADMIN_MAIRIE)).post(url(suggestion, "pertinente")))
@@ -234,15 +247,21 @@ class TestPertinence:
         reponse = getattr(client_connecte(creer_utilisateur(role=role)), methode)(url(suggestion, "pertinente"))
         erreur(reponse, CodeErreur.PERMISSION_REFUSEE, 403)
         suggestion.refresh_from_db()
-        assert not suggestion.est_pertinente
+        assert suggestion.est_pertinente is None
 
-    def test_la_mairie_filtre_les_pertinentes(self, creer, citoyen, agent, client_connecte):
-        retenue, autre = creer(citoyen, titre="Retenue"), creer(citoyen, titre="Autre")
+    def test_la_mairie_filtre_les_trois_etats(self, creer, citoyen, agent, client_connecte):
+        retenue, ecartee, nouvelle = creer(citoyen, titre="Retenue"), creer(citoyen, titre="Écartée"), creer(citoyen, titre="Nouvelle")
         services.marquer_pertinente(retenue)
+        services.marquer_pertinente(ecartee, False)
         client = client_connecte(agent)
-        donnees = client.get(URL, {"est_pertinente": "true"}).json()["donnees"]
-        assert [(d["id"], d["est_pertinente"]) for d in donnees] == [(retenue.pk, True)]
-        assert [d["id"] for d in client.get(URL, {"est_pertinente": "false"}).json()["donnees"]] == [autre.pk]
+
+        def ids(valeur):
+            return [d["id"] for d in client.get(URL, {"est_pertinente": valeur}).json()["donnees"]]
+
+        assert ids("true") == [retenue.pk]
+        assert ids("false") == [ecartee.pk]
+        assert ids("null") == [nouvelle.pk]
+        assert client.get(URL, {"est_pertinente": "oui"}).status_code == 400
 
     def test_jamais_visible_ni_filtrable_hors_mairie(self, creer, citoyen, creer_utilisateur, client_connecte):
         retenue = creer(citoyen)

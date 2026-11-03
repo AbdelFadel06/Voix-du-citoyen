@@ -86,6 +86,7 @@ class RecapitulatifMixin:
             "globales": services.synthese(filtres, self.mairie),
             "par_secteur": services.par_secteur(filtres, self.mairie),
             "par_quartier": services.par_quartier(filtres, self.mairie, arrondissement),
+            "realisations_par_secteur": services.realisations_par_secteur(filtres, self.mairie),
         }
         return reponse_succes(SyntheseCompleteSerializer(donnees).data)
 
@@ -104,10 +105,14 @@ Tout le récapitulatif en un seul appel :
    total en FCFA, avancement moyen) ;
 2. `par_secteur` : une ligne par secteur (signalements, ouverts, résolus, taux de résolution,
    suggestions, réalisations), du plus grand nombre de signalements au plus petit ;
-3. `par_quartier` : une ligne par quartier ayant au moins un dossier, mêmes colonnes.
+3. `par_quartier` : une ligne par quartier ayant au moins un dossier, mêmes colonnes ;
+4. `realisations_par_secteur` : pour chaque secteur qui a des réalisations, leur nombre, la
+   répartition par statut, le budget total (FCFA), l'avancement moyen (et les brouillons pour la
+   mairie), du plus grand nombre de réalisations au plus petit.
 
-Les filtres s'appliquent aux trois blocs ; `arrondissement` ne limite que `par_quartier`.
-Pour l'admin de la plateforme seulement : `suggestions.pertinentes` et `realisations.brouillons`.
+Les filtres s'appliquent à tous les blocs ; `arrondissement` ne limite que `par_quartier`.
+Pour l'admin de la plateforme seulement : `suggestions` (dont `pertinentes`, `non_pertinentes`,
+`non_evaluees`) et `brouillons`.
 {ACCES}""",
         parameters=[FiltresSyntheseSerializer],
         responses={200: enveloppe(SyntheseCompleteSerializer), **erreurs(400, 401, 403)},
@@ -259,13 +264,17 @@ class SyntheseCompleteView(RecapitulatifMixin, VueTableauMairie):
 Tout le récapitulatif de la commune en un seul appel :
 
 1. `globales` : chiffres clés — signalements (total, par statut, ouverts, taux et délai moyen
-   de résolution), suggestions (nombre, soutiens, pertinentes) et réalisations (par statut,
+   de résolution), suggestions (nombre, soutiens, pertinentes, non pertinentes, pas encore
+   évaluées) et réalisations (par statut,
    brouillons, budget total en FCFA, avancement moyen) ;
 2. `par_secteur` : une ligne par secteur (signalements, ouverts, résolus, taux de résolution,
    suggestions, réalisations), du plus grand nombre de signalements au plus petit ;
-3. `par_quartier` : une ligne par quartier ayant au moins un dossier, mêmes colonnes.
+3. `par_quartier` : une ligne par quartier ayant au moins un dossier, mêmes colonnes ;
+4. `realisations_par_secteur` : pour chaque secteur qui a des réalisations, leur nombre, la
+   répartition par statut, le budget total (FCFA), l'avancement moyen (et les brouillons pour la
+   mairie), du plus grand nombre de réalisations au plus petit.
 
-Les filtres s'appliquent aux trois blocs ; `secteur` et `quartier` acceptent plusieurs valeurs
+Les filtres s'appliquent à tous les blocs ; `secteur` et `quartier` acceptent plusieurs valeurs
 (`secteur=1&secteur=3` ou `secteur=1,3`) ; `arrondissement` ne limite que `par_quartier`.
 L'évolution dans le temps et la carte restent à part (`/mairie/dashboard/evolution/`,
 `/mairie/dashboard/carte/`), car plus lourdes.

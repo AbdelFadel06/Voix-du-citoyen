@@ -23,10 +23,11 @@ class SuggestionFilter(django_filters.FilterSet):
         field_name="cree_le", lookup_expr="date__lte", help_text="Envoyées jusqu'à ce jour inclus (AAAA-MM-JJ)."
     )
     commune = FiltreCommune()
-    est_pertinente = django_filters.BooleanFilter(
+    est_pertinente = django_filters.ChoiceFilter(
+        choices=[("true", "Pertinentes"), ("false", "Non pertinentes"), ("null", "Pas encore évaluées")],
         method="filtrer_pertinence",
-        help_text="`true` : uniquement les suggestions cochées « pertinentes » par la mairie. "
-        "**Agents et admins uniquement** (ignoré pour les autres rôles).",
+        help_text="`true` : marquées pertinentes ; `false` : marquées non pertinentes ; `null` : pas encore "
+        "évaluées. **Agents et admins uniquement** (ignoré pour les autres rôles).",
     )
 
     modifie_depuis = django_filters.IsoDateTimeFilter(
@@ -42,6 +43,6 @@ class SuggestionFilter(django_filters.FilterSet):
 
     def filtrer_pertinence(self, queryset, name, valeur):
         # Ignoré hors mairie : un citoyen ne doit pas pouvoir deviner les suggestions cochées.
-        if valeur is None or not est_personnel_mairie(getattr(self.request, "user", None)):
+        if not valeur or not est_personnel_mairie(getattr(self.request, "user", None)):
             return queryset
-        return queryset.filter(est_pertinente=valeur)
+        return queryset.filter(est_pertinente={"true": True, "false": False, "null": None}[valeur])

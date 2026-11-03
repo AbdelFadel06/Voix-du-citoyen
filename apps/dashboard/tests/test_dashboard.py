@@ -102,7 +102,7 @@ class TestSynthese:
             "taux_resolution": 25.0,
             "delai_moyen_resolution_jours": 2.0,
         }
-        assert donnees["suggestions"] == {"total": 2, "nb_soutiens": 1, "pertinentes": 1}
+        assert donnees["suggestions"] == {"total": 2, "nb_soutiens": 1, "pertinentes": 1, "non_pertinentes": 0, "non_evaluees": 1}
         assert donnees["realisations"] == {
             "total": 2,
             "par_statut": {"PLANIFIEE": 1, "EN_COURS": 1, "TERMINEE": 0, "SUSPENDUE": 0},
@@ -113,7 +113,7 @@ class TestSynthese:
 
     def test_une_organisation_ne_voit_ni_brouillons_ni_suggestions(self, organisation):
         recapitulatif = lire(organisation, "synthese")
-        assert set(recapitulatif) == {"globales", "par_secteur", "par_quartier"}
+        assert set(recapitulatif) == {"globales", "par_secteur", "par_quartier", "realisations_par_secteur"}
         donnees = recapitulatif["globales"]
         assert "suggestions" not in donnees
         assert "brouillons" not in donnees["realisations"]
@@ -153,7 +153,7 @@ class TestSynthese:
         plateforme = client_connecte(creer_utilisateur(role=Utilisateur.Role.ADMIN_MAIRIE, commune=None))
         reponse = plateforme.get("/api/v1/dashboard/synthese/", {"secteur": f"{donnees['voirie'].pk},{donnees['eclairage'].pk}"})
         recapitulatif = reponse.json()["donnees"]
-        assert set(recapitulatif) == {"globales", "par_secteur", "par_quartier"}
+        assert set(recapitulatif) == {"globales", "par_secteur", "par_quartier", "realisations_par_secteur"}
         assert recapitulatif["globales"]["signalements"]["total"] == 4
         # Les autres tableaux acceptent aussi plusieurs valeurs.
         for nom in ("par-secteur", "par-quartier", "evolution", "carte"):
@@ -270,10 +270,38 @@ def test_nombre_de_requetes_independant_du_volume(nom, mairie, donnees, televers
 class TestRecapitulatifMairie:
     def test_trois_blocs_coherents(self, mairie):
         donnees = lire(mairie, "synthese")
-        assert set(donnees) == {"globales", "par_secteur", "par_quartier"}
+        assert set(donnees) == {"globales", "par_secteur", "par_quartier", "realisations_par_secteur"}
         total = donnees["globales"]["signalements"]["total"]
         assert sum(l["signalements"] for l in donnees["par_secteur"]) == total
         assert sum(l["signalements"] for l in donnees["par_quartier"]) == total
+
+    def test_realisations_par_secteur(self, mairie, organisation, donnees):
+        lignes = {l["secteur"]["code"]: l for l in lire(mairie, "synthese")["realisations_par_secteur"]}
+        assert set(lignes) == {"VOIRIE", "ECLAIRAGE"}
+        voirie, eclairage = lignes["VOIRIE"], lignes["ECLAIRAGE"]
+        assert (voirie["total"], voirie["par_statut"]["EN_COURS"], voirie["budget_total"]) == (1, 1, 1000000)
+        assert (voirie["taux_avancement_moyen"], voirie["brouillons"]) == (40.0, 0)
+        assert (eclairage["total"], eclairage["par_statut"]["PLANIFIEE"], eclairage["brouillons"]) == (1, 1, 1)
+        globales = lire(mairie, "synthese")["globales"]["realisations"]
+        assert sum(l["total"] for l in lignes.values()) == globales["total"]
+        assert sum(l["budget_total"] for l in lignes.values()) == globales["budget_total"]
+        # Filtre secteur : seulement les secteurs choisis.
+        filtre = lire(mairie, "synthese", secteur=donnees["eclairage"].pk)["realisations_par_secteur"]
+        assert [l["secteur"]["code"] for l in filtre] == ["ECLAIRAGE"]
+        # Organisation : réalisations publiées seulement, sans brouillons.
+        vue_ong = lire(organisation, "synthese")["realisations_par_secteur"]
+        assert [l["secteur"]["code"] for l in vue_ong] == ["VOIRIE"] and "brouillons" not in vue_ong[0]
+
+    def test_realisation_sur_plusieurs_quartiers_comptee_une_fois(self, mairie, donnees):
+        realisations.creer_realisation(
+            par=donnees["agent"], titre="Caniveaux", description="D", secteur=donnees["voirie"],
+            quartiers=[donnees["togoudo"], donnees["cococodji"]], publie=True, budget=200000,
+        )
+        quartiers = f"{donnees['togoudo'].pk},{donnees['cococodji'].pk}"
+        voirie = next(
+            l for l in lire(mairie, "synthese", quartier=quartiers)["realisations_par_secteur"] if l["secteur"]["code"] == "VOIRIE"
+        )
+        assert (voirie["total"], voirie["budget_total"]) == (2, 1200000)
 
     def test_le_parametre_commune_n_existe_pas(self, mairie):
         from apps.territoire.models import Commune

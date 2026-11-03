@@ -160,7 +160,9 @@ class SyntheseSignalementsSerializer(serializers.Serializer):
 class SyntheseSuggestionsSerializer(serializers.Serializer):
     total = _entier("Nombre de suggestions.")
     nb_soutiens = _entier("Total des soutiens reçus.")
-    pertinentes = _entier("Suggestions cochées « pertinentes ».")
+    pertinentes = _entier("Suggestions marquées pertinentes.")
+    non_pertinentes = _entier("Suggestions marquées non pertinentes.")
+    non_evaluees = _entier("Suggestions pas encore évaluées par la mairie.")
 
 
 class StatutsRealisationSerializer(serializers.Serializer):
@@ -285,7 +287,16 @@ class CarteSerializer(serializers.Serializer):
     realisations = PointRealisationSerializer(many=True, help_text="Réalisations localisées.")
 
 
+class LigneRealisationsSecteurSerializer(SyntheseRealisationsSerializer):
+    secteur = SecteurTableauSerializer(help_text="Secteur.")
+
+
 class SyntheseCompleteSerializer(serializers.Serializer):
     globales = SyntheseSerializer(help_text="Chiffres clés de la commune (même contenu que la synthèse).")
     par_secteur = LigneSecteurSerializer(many=True, help_text="Une ligne par secteur, du plus grand nombre de signalements au plus petit.")
     par_quartier = LigneQuartierSerializer(many=True, help_text="Une ligne par quartier ayant au moins un dossier, du plus grand nombre de signalements au plus petit.")
+    realisations_par_secteur = LigneRealisationsSecteurSerializer(
+        many=True,
+        help_text="Réalisations de chaque secteur qui en a (par statut, budget total, avancement moyen ; "
+        "brouillons pour la mairie), du plus grand nombre de réalisations au plus petit.",
+    )

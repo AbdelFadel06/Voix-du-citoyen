@@ -16,7 +16,7 @@ _REALISATIONS = {
 }
 SYNTHESE_MAIRIE = {
     "signalements": _SIGNALEMENTS,
-    "suggestions": {"total": 88, "nb_soutiens": 1742, "pertinentes": 14},
+    "suggestions": {"total": 88, "nb_soutiens": 1742, "pertinentes": 14, "non_pertinentes": 9, "non_evaluees": 65},
     "realisations": {**_REALISATIONS, "total": 31, "brouillons": 4},
 }
 SYNTHESE_ORGANISATION = {
@@ -80,10 +80,24 @@ CARTE = {
     ],
 }
 
+REALISATIONS_PAR_SECTEUR = [
+    {
+        "secteur": {"id": 1, "nom": "Voirie", "code": "VOIRIE", "couleur": "#F57C00"},
+        "total": 12, "par_statut": {"PLANIFIEE": 3, "EN_COURS": 4, "TERMINEE": 5, "SUSPENDUE": 0},
+        "budget_total": 845000000, "taux_avancement_moyen": 61.7, "brouillons": 2,
+    },
+    {
+        "secteur": {"id": 3, "nom": "Insalubrité", "code": "INSALUBRITE", "couleur": "#6D4C41"},
+        "total": 4, "par_statut": {"PLANIFIEE": 1, "EN_COURS": 1, "TERMINEE": 2, "SUSPENDUE": 0},
+        "budget_total": 120000000, "taux_avancement_moyen": 72.5, "brouillons": 0,
+    },
+]
+
 SYNTHESE_COMPLETE = {
     "globales": SYNTHESE_MAIRIE,
     "par_secteur": PAR_SECTEUR,
     "par_quartier": PAR_QUARTIER,
+    "realisations_par_secteur": REALISATIONS_PAR_SECTEUR,
 }
 
 _SANS_SUGGESTIONS = ("suggestions",)
@@ -91,4 +105,5 @@ SYNTHESE_COMPLETE_ORGANISATION = {
     "globales": SYNTHESE_ORGANISATION,
     "par_secteur": [{k: v for k, v in ligne.items() if k not in _SANS_SUGGESTIONS} for ligne in PAR_SECTEUR],
     "par_quartier": [{k: v for k, v in ligne.items() if k not in _SANS_SUGGESTIONS} for ligne in PAR_QUARTIER],
+    "realisations_par_secteur": [{k: v for k, v in ligne.items() if k != "brouillons"} for ligne in REALISATIONS_PAR_SECTEUR],
 }

@@ -1,7 +1,7 @@
 """
 Logique métier des suggestions (CLAUDE.md § 5 et § 6).
 
-Pas de statut : la mairie coche les suggestions pertinentes (`marquer_pertinente`).
+Pas de statut : la mairie marque les suggestions pertinentes ou non (`marquer_pertinente`).
 L'auteur est notifié à chaque réponse officielle.
 """
 
@@ -90,7 +90,10 @@ def retirer_soutien(suggestion, citoyen):
 
 
 def marquer_pertinente(suggestion, pertinente=True):
-    """Coche (ou décoche) la suggestion comme pertinente. Sans effet si elle l'est déjà."""
+    """
+    `True` : pertinente ; `False` : non pertinente ; `None` : évaluation retirée (pas encore
+    évaluée). Sans effet si la suggestion est déjà dans cet état.
+    """
     Suggestion.objects.filter(pk=suggestion.pk).exclude(est_pertinente=pertinente).update(
         est_pertinente=pertinente, maj_le=timezone.now()
     )

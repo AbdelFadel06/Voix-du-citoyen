@@ -61,8 +61,8 @@ class SuggestionListSerializer(ChampsMairieMixin, serializers.ModelSerializer):
         read_only_fields = fields
         extra_kwargs = {
             "est_pertinente": {
-                "help_text": "Vrai si la mairie a coché la suggestion comme pertinente "
-                "(agents et admins uniquement)."
+                "help_text": "Évaluation de la mairie : `true` pertinente, `false` non pertinente, `null` pas "
+                "encore évaluée (agents et admins uniquement)."
             },
             "id": {"help_text": "Identifiant de la suggestion (pour `/suggestions/{id}/`)."},
             "reference": {"help_text": "Référence de la suggestion, ex. `SUG-2026-00007`."},
@@ -127,8 +127,18 @@ class SuggestionDetailSerializer(SuggestionListSerializer):
         }
 
 
+class MarquePertinenceSerializer(serializers.Serializer):
+    est_pertinente = serializers.BooleanField(
+        default=True,
+        help_text="`true` (défaut, corps vide accepté) : pertinente ; `false` : non pertinente.",
+    )
+
+
 class PertinenceSerializer(serializers.Serializer):
-    est_pertinente = serializers.BooleanField(help_text="État de la marque « pertinente » après l'opération.")
+    est_pertinente = serializers.BooleanField(
+        allow_null=True,
+        help_text="Évaluation après l'opération : `true` pertinente, `false` non pertinente, `null` pas encore évaluée.",
+    )
 
 
 class SoutienSerializer(serializers.Serializer):

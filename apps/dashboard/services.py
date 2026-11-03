@@ -89,27 +89,10 @@ def synthese(filtres, mairie):
     )["delai"]
 
 
-    travaux = realisations(filtres, mairie)
-    chiffres = Realisation.objects.filter(pk__in=travaux.values("pk")).aggregate(
-        total=Count("id"),
-        budget=Sum("budget"),
-        avancement=Avg("taux_avancement"),
-        publiees=Count("id", filter=Q(publie=True)),
-    )
-    travaux_par_statut = dict(
-        Realisation.objects.filter(pk__in=travaux.values("pk"))
-        .values_list("statut")
-        .annotate(n=Count("id"))
-        .values_list("statut", "n")
-    )
-    bloc_realisations = {
-        "total": chiffres["total"],
-        "par_statut": {statut: travaux_par_statut.get(statut, 0) for statut in Realisation.Statut.values},
-        "budget_total": int(chiffres["budget"] or 0),
-        "taux_avancement_moyen": round(chiffres["avancement"], 1) if chiffres["avancement"] is not None else None,
-    }
-    if mairie:
-        bloc_realisations["brouillons"] = chiffres["total"] - chiffres["publiees"]
+    travaux = _realisations_distinctes(filtres, mairie)
+    chiffres = travaux.aggregate(**AGREGATS_REALISATIONS)
+    travaux_par_statut = dict(travaux.values_list("statut").annotate(n=Count("id")).values_list("statut", "n"))
+    bloc_realisations = _bloc_realisations(chiffres, travaux_par_statut, mairie)
 
     resultat = {
         "signalements": {
@@ -124,12 +107,62 @@ def synthese(filtres, mairie):
     }
     if mairie:  # les suggestions restent entre les citoyens et la mairie
         idees = suggestions(filtres).aggregate(
-            total=Count("id"), soutiens=Sum("nb_soutiens"), pertinentes=Count("id", filter=Q(est_pertinente=True))
+            total=Count("id"),
+            soutiens=Sum("nb_soutiens"),
+            pertinentes=Count("id", filter=Q(est_pertinente=True)),
+            non_pertinentes=Count("id", filter=Q(est_pertinente=False)),
+            non_evaluees=Count("id", filter=Q(est_pertinente__isnull=True)),
         )
         resultat["suggestions"] = {
-            "total": idees["total"], "nb_soutiens": idees["soutiens"] or 0, "pertinentes": idees["pertinentes"]
+            "total": idees["total"],
+            "nb_soutiens": idees["soutiens"] or 0,
+            "pertinentes": idees["pertinentes"],
+            "non_pertinentes": idees["non_pertinentes"],
+            "non_evaluees": idees["non_evaluees"],
         }
     return resultat
+
+
+AGREGATS_REALISATIONS = {
+    "total": Count("id"),
+    "budget": Sum("budget"),
+    "avancement": Avg("taux_avancement"),
+    "publiees": Count("id", filter=Q(publie=True)),
+}
+
+
+def _realisations_distinctes(filtres, mairie):
+    # Sans doublon dû aux quartiers (une réalisation peut en couvrir plusieurs) avant d'agréger.
+    return Realisation.objects.filter(pk__in=realisations(filtres, mairie).values("pk"))
+
+
+def _bloc_realisations(chiffres, par_statut, mairie):
+    bloc = {
+        "total": chiffres["total"],
+        "par_statut": {statut: par_statut.get(statut, 0) for statut in Realisation.Statut.values},
+        "budget_total": int(chiffres["budget"] or 0),
+        "taux_avancement_moyen": round(chiffres["avancement"], 1) if chiffres["avancement"] is not None else None,
+    }
+    if mairie:
+        bloc["brouillons"] = chiffres["total"] - chiffres["publiees"]
+    return bloc
+
+
+def realisations_par_secteur(filtres, mairie):
+    """Chiffres des réalisations (statuts, budget, avancement) pour chaque secteur qui en a."""
+    travaux = _realisations_distinctes(filtres, mairie)
+    chiffres = {ligne.pop("secteur"): ligne for ligne in travaux.values("secteur").annotate(**AGREGATS_REALISATIONS)}
+    statuts = {}
+    for secteur, statut, n in travaux.values_list("secteur", "statut").annotate(n=Count("id")):
+        statuts.setdefault(secteur, {})[statut] = n
+    lignes = [
+        {
+            "secteur": {"id": s.pk, "nom": s.nom, "code": s.code, "couleur": s.couleur},
+            **_bloc_realisations(chiffres[s.pk], statuts.get(s.pk, {}), mairie),
+        }
+        for s in Secteur.objects.filter(pk__in=chiffres)
+    ]
+    return sorted(lignes, key=lambda l: (-l["total"], l["secteur"]["nom"]))
 
 
 def _compter_par(queryset, champ):

@@ -24,6 +24,7 @@ from . import exemples, services
 from .filters import SuggestionFilter
 from .models import Soutien, Suggestion, SuiviSuggestion
 from .serializers import (
+    MarquePertinenceSerializer,
     PertinenceSerializer,
     ReponseSuggestionSerializer,
     SoutienSerializer,
@@ -36,7 +37,8 @@ ACTIONS_MAIRIE = {"pertinente", "repondre"}
 ACTIONS_DETAIL = {"retrieve", "create", "repondre"}
 
 MESSAGE_PERTINENTE = "Suggestion marquée comme pertinente."
-MESSAGE_NON_PERTINENTE = "Marque « pertinente » retirée."
+MESSAGE_NON_PERTINENTE = "Suggestion marquée comme non pertinente."
+MESSAGE_PERTINENCE_RETIREE = "Évaluation retirée : la suggestion n'est plus évaluée."
 
 EXEMPLE_INTROUVABLE = exemple_erreur(CodeErreur.RESSOURCE_INTROUVABLE, nom="Suggestion inconnue")
 EXEMPLE_RESERVE_MAIRIE = exemple_erreur(
@@ -57,8 +59,9 @@ DESCRIPTION_VISIBILITE = """
 - **Agents et admins** : en plus, la marque `est_pertinente`, l'agent qui a répondu, les notes internes.
 - **Citoyens** : `je_soutiens` indique s'ils soutiennent déjà la suggestion.
 
-Les suggestions n'ont **pas de statut**. La mairie coche celles qu'elle juge pertinentes ;
-cette marque n'est **jamais** montrée aux citoyens.
+Les suggestions n'ont **pas de statut**. La mairie les évalue : `est_pertinente` vaut `null`
+(pas encore évaluée, à la création), `true` (pertinente) ou `false` (non pertinente) ; cette
+évaluation n'est **jamais** montrée aux citoyens.
 
 **Organisations** : aucun accès aux suggestions (`PERMISSION_REFUSEE`), qui restent un
 échange entre les citoyens et leur mairie.
@@ -77,8 +80,8 @@ sont renvoyées ; le détail est donné par `GET /suggestions/{{id}}/`.
 `quartier: null` signifie que la suggestion concerne **toute la commune**.
 
 **Filtres** : `secteur`, `quartier`, `date_debut`, `date_fin` (dates d'envoi) et, pour la
-mairie uniquement, `est_pertinente=true` (suggestions retenues pour les prises de décision ;
-le filtre est ignoré pour les autres rôles).
+mairie uniquement, `est_pertinente=true` (retenues), `false` (écartées) ou `null` (pas encore
+évaluées) ; le filtre est ignoré pour les autres rôles.
 **Recherche** (`recherche`) : référence, titre, description.
 **Tri** (`tri`) : `cree_le`, `maj_le`, `nb_soutiens`, `reference` (`-` pour l'ordre décroissant).
 {DESCRIPTION_VISIBILITE}
@@ -273,21 +276,38 @@ Retire le soutien du citoyen connecté et renvoie le nouveau nombre de soutiens.
     @extend_schema(
         methods=["POST"],
         tags=[TAG_SUGGESTIONS],
-        summary="Marquer une suggestion comme pertinente",
+        summary="Marquer une suggestion pertinente ou non pertinente",
         description="""
-Coche la suggestion comme **pertinente** pour la mairie, afin de la retrouver ensuite avec
-`GET /suggestions/?est_pertinente=true` lors des prises de décision.
+Évalue la suggestion pour la mairie, afin de la retrouver ensuite lors des prises de décision
+(`GET /suggestions/?est_pertinente=true`, `false` ou `null`).
 
-- **Sans effet si elle est déjà cochée** (requête renvoyable sans risque).
-- La marque n'est **jamais** visible par les citoyens ni par les organisations, et ne
+À la création, une suggestion n'est **pas encore évaluée** (`est_pertinente: null`).
+
+| Corps | Résultat |
+|---|---|
+| vide ou `{"est_pertinente": true}` | pertinente |
+| `{"est_pertinente": false}` | non pertinente |
+
+Pour revenir à « pas encore évaluée » : `DELETE` sur la même adresse.
+
+- **Sans effet si elle est déjà dans cet état** (requête renvoyable sans risque).
+- L'évaluation n'est **jamais** visible par les citoyens ni par les organisations, et ne
   déclenche aucune notification.
 
 **Connecté** : agents et admins mairie.
 """,
-        request=None,
-        responses={200: enveloppe(PertinenceSerializer), **erreurs(401, 403, 404)},
+        request=MarquePertinenceSerializer,
+        responses={200: enveloppe(PertinenceSerializer), **erreurs(400, 401, 403, 404)},
         examples=[
-            exemple_succes("Cochée", {"est_pertinente": True}, MESSAGE_PERTINENTE),
+            exemple_requete("Pertinente (corps vide accepté)", {"est_pertinente": True}),
+            exemple_requete("Non pertinente", {"est_pertinente": False}),
+            exemple_succes("Pertinente", {"est_pertinente": True}, MESSAGE_PERTINENTE),
+            exemple_succes("Non pertinente", {"est_pertinente": False}, MESSAGE_NON_PERTINENTE),
+            exemple_erreur(
+                CodeErreur.VALIDATION_ERREUR,
+                details={"est_pertinente": ["Doit être une valeur booléenne valide."]},
+                nom="Valeur invalide",
+            ),
             EXEMPLE_INTROUVABLE,
             EXEMPLE_RESERVE_MAIRIE,
             *EXEMPLES_AUTH_REQUISE,
@@ -296,16 +316,17 @@ Coche la suggestion comme **pertinente** pour la mairie, afin de la retrouver en
     @extend_schema(
         methods=["DELETE"],
         tags=[TAG_SUGGESTIONS],
-        summary="Retirer la marque « pertinente »",
+        summary="Retirer l'évaluation d'une suggestion",
         description="""
-Décoche la suggestion. **Sans effet si elle n'était pas cochée** (requête renvoyable sans risque).
+Annule l'évaluation (pertinente ou non) : la suggestion redevient **pas encore évaluée**
+(`est_pertinente: null`). **Sans effet si elle n'était pas évaluée** (requête renvoyable sans risque).
 
 **Connecté** : agents et admins mairie.
 """,
         request=None,
         responses={200: enveloppe(PertinenceSerializer), **erreurs(401, 403, 404)},
         examples=[
-            exemple_succes("Décochée", {"est_pertinente": False}, MESSAGE_NON_PERTINENTE),
+            exemple_succes("Évaluation retirée", {"est_pertinente": None}, MESSAGE_PERTINENCE_RETIREE),
             EXEMPLE_INTROUVABLE,
             EXEMPLE_RESERVE_MAIRIE,
             *EXEMPLES_AUTH_REQUISE,
@@ -313,12 +334,16 @@ Décoche la suggestion. **Sans effet si elle n'était pas cochée** (requête re
     )
     @action(detail=True, methods=["post", "delete"])
     def pertinente(self, request, pk=None):
-        cochee = request.method == "POST"
-        suggestion = services.marquer_pertinente(self.get_object(), cochee)
-        return reponse_succes(
-            {"est_pertinente": suggestion.est_pertinente},
-            MESSAGE_PERTINENTE if cochee else MESSAGE_NON_PERTINENTE,
-        )
+        suggestion = self.get_object()
+        if request.method == "DELETE":
+            valeur, message = None, MESSAGE_PERTINENCE_RETIREE
+        else:
+            entree = MarquePertinenceSerializer(data=request.data)
+            entree.is_valid(raise_exception=True)
+            valeur = entree.validated_data["est_pertinente"]
+            message = MESSAGE_PERTINENTE if valeur else MESSAGE_NON_PERTINENTE
+        suggestion = services.marquer_pertinente(suggestion, valeur)
+        return reponse_succes({"est_pertinente": suggestion.est_pertinente}, message)
 
     @extend_schema(
         tags=[TAG_SUGGESTIONS],

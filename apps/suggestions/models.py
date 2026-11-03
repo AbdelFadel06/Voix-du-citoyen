@@ -6,8 +6,9 @@ from apps.core.models import ModeleHorodate
 
 class Suggestion(ModeleHorodate):
     """
-    Idée d'un citoyen. Pas de statut : la mairie coche celles qu'elle juge pertinentes
-    (`est_pertinente`, visible uniquement par la mairie) pour les retrouver lors des décisions.
+    Idée d'un citoyen. Pas de statut : la mairie marque chacune pertinente ou non pertinente
+    (`est_pertinente`, `null` = pas encore évaluée, visible uniquement par la mairie) pour les
+    retrouver lors des décisions.
     """
 
     reference = models.CharField("référence", max_length=20, unique=True, editable=False)
@@ -41,7 +42,10 @@ class Suggestion(ModeleHorodate):
         related_name="suggestions",
         verbose_name="auteur",
     )
-    est_pertinente = models.BooleanField("jugée pertinente par la mairie", default=False, db_index=True)
+    est_pertinente = models.BooleanField(
+        "jugée pertinente par la mairie", null=True, default=None, db_index=True,
+        help_text="Vide : pas encore évaluée ; oui : pertinente ; non : non pertinente.",
+    )
     nb_soutiens = models.PositiveIntegerField("nombre de soutiens", default=0)
     medias = models.ManyToManyField(
         "medias.Media", blank=True, related_name="suggestions", verbose_name="photos"
