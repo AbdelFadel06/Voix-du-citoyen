@@ -291,6 +291,16 @@ SPECTACULAR_SETTINGS = {
 
 SMS_BACKEND_CONSOLE = "apps.core.sms.backends.console.ConsoleSMS"
 SMS_BACKEND = env("SMS_BACKEND", default=SMS_BACKEND_CONSOLE)
+SMS_BACKEND_NOTIFYHUB = "apps.core.sms.backends.notifyhub.NotifyHubSMS"
+
+# NotifyHub (apps/core/sms/backends/notifyhub.py) : clé d'API secrète, modèle WhatsApp approuvé
+# par Meta (variable unique : le code), Sender ID SMS approuvé (vide = pas de SMS).
+NOTIFYHUB_URL = env("NOTIFYHUB_URL", default="https://api-notifyhub.group-dev.com/api/v1")
+NOTIFYHUB_CLE = env("NOTIFYHUB_CLE", default="")
+NOTIFYHUB_WHATSAPP_MODELE = env("NOTIFYHUB_WHATSAPP_MODELE", default="")
+NOTIFYHUB_WHATSAPP_LANGUE = env("NOTIFYHUB_WHATSAPP_LANGUE", default="fr")
+NOTIFYHUB_SMS_EXPEDITEUR = env("NOTIFYHUB_SMS_EXPEDITEUR", default="")
+NOTIFYHUB_DELAI = env.int("NOTIFYHUB_DELAI", default=10)  # secondes
 
 # ---------------------------------------------------------------------------
 # Notifications push (voir apps/core/push/)

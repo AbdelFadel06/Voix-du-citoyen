@@ -459,6 +459,18 @@ SMS_BACKEND=apps.core.sms.backends.console.ConsoleSMS
 PUSH_BACKEND=apps.core.push.backends.console.ConsolePush
 ```
 
+Pour envoyer les codes OTP par **NotifyHub** (WhatsApp, et SMS si un Sender ID est accordé) ;
+le serveur refuse de démarrer sans clé (`core.E004`) et avertit si le modèle WhatsApp ou le Sender ID
+manque (`core.W001`, `core.W002`) :
+
+```bash
+SMS_BACKEND=apps.core.sms.backends.notifyhub.NotifyHubSMS
+NOTIFYHUB_CLE='...'                         # « Projets et clés » de NotifyHub (gd_test_… = Sandbox, rien ne part)
+NOTIFYHUB_WHATSAPP_MODELE=nom_du_modele     # modèle « Authentification » approuvé par Meta, variable {{1}} = code
+NOTIFYHUB_WHATSAPP_LANGUE=fr
+NOTIFYHUB_SMS_EXPEDITEUR=                   # Sender ID approuvé ; vide = codes par WhatsApp seulement
+```
+
 Pour envoyer de vrais e-mails (codes « mot de passe oublié » de la mairie et des organisations),
 ajouter un service SMTP ; sans ces lignes, les e-mails s'affichent dans les journaux :
 

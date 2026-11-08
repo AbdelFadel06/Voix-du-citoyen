@@ -13,7 +13,7 @@ LARGEUR = 64
 class ConsoleSMS(FournisseurSMS):
     """Développement uniquement : affiche le message dans le terminal au lieu de l'envoyer."""
 
-    def envoyer(self, telephone, message, canal=Canal.SMS):
+    def envoyer(self, telephone, message, canal=Canal.SMS, code=None):
         heure = timezone.localtime().strftime("%d/%m/%Y %H:%M:%S")
         lignes = [f"À       : {telephone}", f"Heure   : {heure}", "Message :"]
         lignes += ["  " + ligne for ligne in textwrap.wrap(message, LARGEUR - 6)]

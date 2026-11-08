@@ -25,6 +25,9 @@ def obtenir_fournisseur() -> FournisseurSMS:
     return _charger_fournisseur(settings.SMS_BACKEND)
 
 
-def envoyer_sms(telephone, message, canal=Canal.SMS):
-    """Envoie un SMS ou un message WhatsApp ; lève EnvoiSMSEchoue si le fournisseur échoue."""
-    obtenir_fournisseur().envoyer(str(telephone), message, canal)
+def envoyer_sms(telephone, message, canal=Canal.SMS, code=None):
+    """
+    Envoie un SMS ou un message WhatsApp ; lève EnvoiSMSEchoue si le fournisseur échoue.
+    `code` : le code seul, pour un fournisseur qui l'insère dans un modèle WhatsApp approuvé.
+    """
+    obtenir_fournisseur().envoyer(str(telephone), message, canal, code=code)

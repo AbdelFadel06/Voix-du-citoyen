@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.checks import Error, register
+from django.core.checks import Warning as Avertissement
 
 
 @register()
@@ -59,3 +60,36 @@ def bloquer_si_erreurs():
     erreurs = [message for message in run_checks() if message.is_serious()]
     if erreurs:
         raise ImproperlyConfigured("\n".join(str(erreur) for erreur in erreurs))
+
+
+@register()
+def verifier_notifyhub(app_configs, **kwargs):
+    """NotifyHub choisi : la clé est indispensable ; sans modèle ni Sender ID, un canal ne marche pas."""
+    if settings.SMS_BACKEND != settings.SMS_BACKEND_NOTIFYHUB:
+        return []
+    if not settings.NOTIFYHUB_CLE:
+        return [
+            Error(
+                "SMS_BACKEND utilise NotifyHub sans clé d'API : aucun code ne serait envoyé.",
+                hint="Renseignez NOTIFYHUB_CLE dans le .env (clé créée dans « Projets et clés » de NotifyHub).",
+                id="core.E004",
+            )
+        ]
+    alertes = []
+    if not settings.NOTIFYHUB_WHATSAPP_MODELE:
+        alertes.append(
+            Avertissement(
+                "NOTIFYHUB_WHATSAPP_MODELE est vide : les codes par WhatsApp échoueront (WHATSAPP_ECHEC).",
+                hint="Indiquez le nom du modèle d'authentification approuvé par Meta.",
+                id="core.W001",
+            )
+        )
+    if not settings.NOTIFYHUB_SMS_EXPEDITEUR:
+        alertes.append(
+            Avertissement(
+                "NOTIFYHUB_SMS_EXPEDITEUR est vide : les codes par SMS échoueront (SMS_ECHEC).",
+                hint="Indiquez le Sender ID approuvé par NotifyHub.",
+                id="core.W002",
+            )
+        )
+    return alertes

@@ -92,7 +92,7 @@ def generer_code_otp(utilisateur, motif, canal=CANAL_PAR_DEFAUT):
         return
     message = MESSAGE_SMS_OTP.format(code=code, minutes=CodeOTP.DUREE_VALIDITE_MINUTES)
     try:
-        envoyer_sms(utilisateur.telephone, message, canal)
+        envoyer_sms(utilisateur.telephone, message, canal, code=code)
     except EnvoiSMSEchoue:
         logger.exception("Échec d'envoi du code (%s, %s) à l'utilisateur %s", motif, canal, utilisateur.pk)
         raise ErreurMetier(CodeErreur.WHATSAPP_ECHEC if canal == Canal.WHATSAPP else CodeErreur.SMS_ECHEC)

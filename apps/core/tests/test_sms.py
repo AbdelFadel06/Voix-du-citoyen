@@ -14,7 +14,7 @@ CONSOLE = "apps.core.sms.backends.console.ConsoleSMS"
 class FauxFournisseur(FournisseurSMS):
     envois = []
 
-    def envoyer(self, telephone, message, canal="SMS"):
+    def envoyer(self, telephone, message, canal="SMS", code=None):
         self.envois.append((telephone, message))
 
 

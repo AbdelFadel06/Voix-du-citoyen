@@ -28,5 +28,8 @@ class FournisseurSMS(ABC):
     """
 
     @abstractmethod
-    def envoyer(self, telephone: str, message: str, canal: str = Canal.SMS) -> None:
-        """Envoie `message` au numéro `telephone` (format E.164) par `canal`, ou lève EnvoiSMSEchoue."""
+    def envoyer(self, telephone: str, message: str, canal: str = Canal.SMS, code: str | None = None) -> None:
+        """
+        Envoie `message` au numéro `telephone` (format E.164) par `canal`, ou lève EnvoiSMSEchoue.
+        `code` (code OTP seul) sert aux fournisseurs dont WhatsApp impose un modèle à variables.
+        """

@@ -140,6 +140,8 @@ class TestInscription:
         assert reponse.status_code == 201
         assert sms[-1].canal == "WHATSAPP"
         assert reponse.json()["message"].endswith("par WhatsApp.")
+        # Le code seul accompagne le message (variable du modèle WhatsApp) et figure dans le texte.
+        assert len(sms[-1].code) == 6 and sms[-1].code in sms[-1].message
         # Renvoi : on peut changer de canal.
         api_client.post(URL_RESEND, {"telephone": TELEPHONE, "canal": "SMS"}, format="json")
         assert sms[-1].canal == "SMS"
