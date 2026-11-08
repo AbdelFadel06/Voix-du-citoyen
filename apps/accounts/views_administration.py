@@ -282,7 +282,7 @@ la personne). L'e-mail est obligatoire et unique ; le téléphone reste enregist
 Lui communiquer le mot de passe ; il ne peut pas encore le changer lui-même.
 
 - `role` : `AGENT` (doit avoir un `service`) ou `ADMIN_MAIRIE`.
-- Numéro béninois ; un numéro déjà utilisé donne `TELEPHONE_DEJA_UTILISE`, un e-mail déjà
+- Numéro béninois ou international (`+33…`) ; un numéro déjà utilisé donne `TELEPHONE_DEJA_UTILISE`, un e-mail déjà
   utilisé `EMAIL_DEJA_UTILISE`.
 
 **Connecté** : admins mairie uniquement.

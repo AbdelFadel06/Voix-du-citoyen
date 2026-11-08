@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.core.codes_erreur import CodeErreur
 from apps.core.reponses import reponse_succes
+from apps.core.sms import Canal
 from apps.core.schema import (
     EXEMPLES_AUTH_REQUISE,
     TAG_AUTH,
@@ -38,14 +39,14 @@ from .serializers import (
     VerificationOTPSerializer,
 )
 
-MESSAGE_INSCRIPTION = "Compte créé. Un code de vérification vous a été envoyé par SMS."
+MESSAGE_INSCRIPTION = "Compte créé. Un code de vérification vous a été envoyé par {canal}."
 MESSAGE_VERIFICATION = "Votre numéro est vérifié. Bienvenue !"
 MESSAGE_RENVOI = "Si une inscription est en attente pour ce numéro, un nouveau code a été envoyé."
 MESSAGE_CONNEXION = "Connexion réussie."
 MESSAGE_PROFIL = "Votre profil a été mis à jour."
 MESSAGE_DEMANDE_REINITIALISATION = (
-    "Si un compte correspond, un code de vérification a été envoyé (par SMS pour un citoyen, "
-    "par e-mail pour la mairie et les organisations)."
+    "Si un compte correspond, un code de vérification a été envoyé (par WhatsApp ou SMS pour un "
+    "citoyen, par e-mail pour la mairie et les organisations)."
 )
 MESSAGE_CHANGEMENT = "Votre mot de passe a été modifié. Vos autres sessions ont été fermées."
 MESSAGE_REINITIALISATION = "Votre mot de passe a été modifié. Connectez-vous avec le nouveau mot de passe."
@@ -92,12 +93,15 @@ class InscriptionView(VuePublique):
         tags=[TAG_AUTH],
         summary="Créer un compte citoyen",
         description="""
-Crée un compte **citoyen** non vérifié et envoie un **code à 6 chiffres** par SMS.
-L'étape suivante est `POST /auth/otp/verify/`.
+Crée un compte **citoyen** non vérifié et envoie un **code à 6 chiffres** par **WhatsApp** ou
+par **SMS**, au choix (`canal`). L'étape suivante est `POST /auth/otp/verify/`.
 
 **Règles**
-- Seuls les numéros béninois (+229) sont acceptés.
-- Si le numéro a déjà été inscrit **sans être vérifié** (SMS perdu, erreur de saisie),
+- Numéros béninois (`0197123456`) ou de tout pays au format international (`+33612345678`).
+- `canal` : `WHATSAPP` ou `SMS`. L'application présélectionne WhatsApp et laisse l'utilisateur
+  changer ; s'il ne reçoit pas le code, proposer l'autre canal avec `POST /auth/otp/resend/`.
+  **Absent : `SMS`**, pour les versions de l'application antérieures à ce choix.
+- Si le numéro a déjà été inscrit **sans être vérifié** (code non reçu, erreur de saisie),
   l'inscription est reprise : les informations sont remplacées et un nouveau code est envoyé.
 - Si le numéro appartient à un compte vérifié, ou à un agent ou une organisation :
   `TELEPHONE_DEJA_UTILISE` (409).
@@ -133,12 +137,12 @@ confondus), sinon `TROP_DE_REQUETES` (429).
                 },
             ),
             exemple_succes(
-                "Compte créé", {"telephone": exemples.TELEPHONE}, MESSAGE_INSCRIPTION, statut=201
+                "Compte créé", {"telephone": exemples.TELEPHONE}, MESSAGE_INSCRIPTION.format(canal="WhatsApp"), statut=201
             ),
             exemple_erreur(
                 CodeErreur.VALIDATION_ERREUR,
                 details={
-                    "telephone": ["Saisissez un numéro de téléphone béninois (+229)."],
+                    "telephone": ["Saisissez un numéro de téléphone valide."],
                     "prenoms": ["Ce champ est obligatoire."],
                     "password": [
                         "Ce mot de passe est trop court. Il doit contenir au minimum 6 caractères.",
@@ -151,6 +155,7 @@ confondus), sinon `TROP_DE_REQUETES` (429).
                 details={"telephone": ["Ce numéro de téléphone est déjà utilisé."]},
             ),
             exemple_trop_de_requetes(),
+            exemple_erreur(CodeErreur.WHATSAPP_ECHEC, description="Envoi WhatsApp impossible : proposer le SMS."),
             exemple_erreur(CodeErreur.SMS_ECHEC, description="Le fournisseur SMS n'a pas répondu."),
         ],
     )
@@ -158,9 +163,10 @@ confondus), sinon `TROP_DE_REQUETES` (429).
         serializer = InscriptionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         utilisateur = services.inscrire_citoyen(**serializer.validated_data)
+        canal = Canal(serializer.validated_data["canal"]).label
         return reponse_succes(
             {"telephone": str(utilisateur.telephone)},
-            MESSAGE_INSCRIPTION,
+            MESSAGE_INSCRIPTION.format(canal=canal),
             status=status.HTTP_201_CREATED,
         )
 
@@ -168,9 +174,9 @@ confondus), sinon `TROP_DE_REQUETES` (429).
 class VerificationOTPView(VuePublique):
     @extend_schema(
         tags=[TAG_AUTH],
-        summary="Vérifier le numéro avec le code SMS",
+        summary="Vérifier le numéro avec le code reçu",
         description="""
-Valide le code reçu par SMS après l'inscription. En cas de succès, le numéro est marqué
+Valide le code reçu (WhatsApp ou SMS) après l'inscription. En cas de succès, le numéro est marqué
 vérifié et **le citoyen est connecté directement** : la réponse contient les jetons
 `access` et `refresh` et le profil, comme `/auth/login/`.
 
@@ -217,11 +223,11 @@ class RenvoiOTPView(VuePublique):
         tags=[TAG_AUTH],
         summary="Renvoyer le code de vérification",
         description="""
-Envoie un nouveau code par SMS à un numéro dont l'inscription n'est pas encore vérifiée.
+Envoie un nouveau code (par WhatsApp ou SMS, selon `canal`) à un numéro dont l'inscription n'est pas encore vérifiée.
 **Le code précédent ne fonctionne plus.**
 
 La réponse est **toujours la même**, que le numéro soit inscrit ou non, pour ne pas révéler
-quels numéros ont un compte. Aucun SMS n'est envoyé si le numéro est inconnu ou déjà vérifié.
+quels numéros ont un compte. Aucun message n'est envoyé si le numéro est inconnu ou déjà vérifié.
 
 **Limitation** : 5 demandes de code par heure et par numéro (inscription et renvoi confondus).
 
@@ -235,13 +241,14 @@ quels numéros ont un compte. Aucun SMS n'est envoyé si le numéro est inconnu 
             exemple_succes("Demande prise en compte", None, MESSAGE_RENVOI),
             EXEMPLE_TELEPHONE_INVALIDE,
             exemple_trop_de_requetes(),
+            exemple_erreur(CodeErreur.WHATSAPP_ECHEC),
             exemple_erreur(CodeErreur.SMS_ECHEC),
         ],
     )
     def post(self, request):
         serializer = RenvoiOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        services.renvoyer_code_inscription(serializer.validated_data["telephone"])
+        services.renvoyer_code_inscription(serializer.validated_data["telephone"], serializer.validated_data["canal"])
         return reponse_succes(message=MESSAGE_RENVOI)
 
 
@@ -334,7 +341,7 @@ L'identifiant est le même qu'à la connexion — envoyer **l'un ou l'autre** :
 
 | Compte | Identifiant | Le code arrive… |
 |---|---|---|
-| Citoyen (application mobile) | `telephone` | par **SMS** |
+| Citoyen (application mobile) | `telephone` | par **WhatsApp** ou **SMS** (`canal`, absent = SMS) |
 | Agent, admin mairie, organisation (application web) | `email` | par **e-mail** |
 
 **Règles**
@@ -364,6 +371,7 @@ L'identifiant est le même qu'à la connexion — envoyer **l'un ou l'autre** :
                 nom="Identifiant manquant ou en double",
             ),
             exemple_trop_de_requetes(),
+            exemple_erreur(CodeErreur.WHATSAPP_ECHEC, description="Envoi WhatsApp impossible : proposer le SMS."),
             exemple_erreur(CodeErreur.SMS_ECHEC, description="Le fournisseur SMS n'a pas répondu."),
         ],
     )

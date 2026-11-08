@@ -204,8 +204,13 @@ Une erreur 500 ne révèle jamais de détail technique.
 
 ## Conventions
 
-- **Téléphones** : numéros béninois. Saisie acceptée au format national (`0197123456`)
-  ou international (`+229 01 97 12 34 56`) ; toujours renvoyés au format `+2290197123456`.
+- **Téléphones** : un numéro sans indicatif est lu comme béninois (`0197123456`) ; tout autre
+  pays s'écrit au format international (`+33 6 12 34 56 78`). Toujours renvoyés au format
+  international (`+2290197123456`).
+- **Codes de vérification** : envoyés par **WhatsApp** ou par **SMS**, au choix de l'utilisateur
+  (`canal` sur `/auth/register/`, `/auth/otp/resend/`, `/auth/password/reset/`) ; l'application
+  présélectionne WhatsApp. Sans `canal` : SMS, comme les versions antérieures de l'application. En cas d'échec :
+  `WHATSAPP_ECHEC` ou `SMS_ECHEC` ; proposer alors l'autre canal.
 - **Dates** : ISO 8601 avec fuseau horaire (`2026-10-06T15:58:21+01:00`, heure de Porto-Novo).
 - **Coordonnées GPS** : degrés décimaux (WGS 84), 6 décimales.
 - **Pagination** : `?page=` (à partir de 1) et `?taille=` (20 par défaut, 100 au maximum).

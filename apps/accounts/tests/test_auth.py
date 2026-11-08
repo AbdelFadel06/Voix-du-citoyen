@@ -122,12 +122,31 @@ class TestInscription:
         assert reponse.status_code == 400
         assert champ in erreur(reponse, CodeErreur.VALIDATION_ERREUR)["details"]
 
-    def test_refuse_un_numero_non_beninois(self, api_client, sms):
-        reponse = api_client.post(
-            URL_REGISTER, donnees_inscription(telephone="+33612345678"), format="json"
-        )
-        assert reponse.status_code == 400
-        assert "béninois" in erreur(reponse)["details"]["telephone"][0]
+    @pytest.mark.parametrize("numero", ["+33612345678", "+2250707070707", "+14155550123"])
+    def test_accepte_un_numero_international(self, api_client, sms, numero):
+        reponse = api_client.post(URL_REGISTER, donnees_inscription(telephone=numero), format="json")
+        assert reponse.status_code == 201, reponse.json()
+        assert reponse.json()["donnees"]["telephone"] == numero
+        assert sms[-1].telephone == numero
+
+    def test_sans_canal_le_code_part_par_sms(self, api_client, sms):
+        # Compatibilité : l'application déjà publiée n'envoie pas `canal`.
+        reponse = api_client.post(URL_REGISTER, donnees_inscription(), format="json")
+        assert sms[-1].canal == "SMS"
+        assert reponse.json()["message"] == "Compte créé. Un code de vérification vous a été envoyé par SMS."
+
+    def test_code_par_whatsapp(self, api_client, sms):
+        reponse = api_client.post(URL_REGISTER, donnees_inscription(canal="WHATSAPP"), format="json")
+        assert reponse.status_code == 201
+        assert sms[-1].canal == "WHATSAPP"
+        assert reponse.json()["message"].endswith("par WhatsApp.")
+        # Renvoi : on peut changer de canal.
+        api_client.post(URL_RESEND, {"telephone": TELEPHONE, "canal": "SMS"}, format="json")
+        assert sms[-1].canal == "SMS"
+
+    def test_canal_inconnu(self, api_client, sms):
+        reponse = api_client.post(URL_REGISTER, donnees_inscription(canal="PIGEON"), format="json")
+        assert "canal" in erreur(reponse)["details"]
 
     def test_refuse_un_numero_invalide(self, api_client, sms):
         reponse = api_client.post(URL_REGISTER, donnees_inscription(telephone="123"), format="json")
@@ -161,11 +180,12 @@ class TestInscription:
         assert CodeOTP.objects.count() == 1
         assert len(sms) == 2
 
-    def test_echec_du_fournisseur_sms(self, api_client, sms):
+    @pytest.mark.parametrize("canal, code", [("WHATSAPP", CodeErreur.WHATSAPP_ECHEC), ("SMS", CodeErreur.SMS_ECHEC)])
+    def test_echec_du_fournisseur(self, api_client, sms, canal, code):
         sms.simuler_echec()
-        reponse = api_client.post(URL_REGISTER, donnees_inscription(), format="json")
+        reponse = api_client.post(URL_REGISTER, donnees_inscription(canal=canal), format="json")
         assert reponse.status_code == 503
-        erreur(reponse, CodeErreur.SMS_ECHEC)
+        erreur(reponse, code)
 
 
 # ---------------------------------------------------------------------------

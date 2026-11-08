@@ -17,7 +17,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.core.codes_erreur import CodeErreur
 from apps.core.exceptions import ErreurMetier
 from apps.core.import_csv import ImportRefuse, executer, lire_csv
-from apps.core.sms import EnvoiSMSEchoue, envoyer_sms
+from apps.core.sms import CANAL_PAR_DEFAUT, Canal, EnvoiSMSEchoue, envoyer_sms
 
 from .models import CodeOTP, Organisation, ServiceMunicipal, Utilisateur, normaliser_email
 
@@ -65,11 +65,11 @@ def _par_email(utilisateur, motif):
     )
 
 
-def generer_code_otp(utilisateur, motif):
+def generer_code_otp(utilisateur, motif, canal=CANAL_PAR_DEFAUT):
     """
-    Crée un nouveau code (les précédents non utilisés sont supprimés) et l'envoie par SMS, ou
-    par e-mail pour la mairie et les organisations qui changent de mot de passe. Le code
-    n'apparaît que dans le message : jamais dans les logs ni dans les réponses.
+    Crée un nouveau code (les précédents non utilisés sont supprimés) et l'envoie par WhatsApp ou
+    par SMS (`canal`), ou par e-mail pour la mairie et les organisations qui changent de mot de
+    passe. Le code n'apparaît que dans le message : jamais dans les logs ni dans les réponses.
     """
     code = f"{secrets.randbelow(10**6):06d}"
     with transaction.atomic():
@@ -92,10 +92,10 @@ def generer_code_otp(utilisateur, motif):
         return
     message = MESSAGE_SMS_OTP.format(code=code, minutes=CodeOTP.DUREE_VALIDITE_MINUTES)
     try:
-        envoyer_sms(utilisateur.telephone, message)
+        envoyer_sms(utilisateur.telephone, message, canal)
     except EnvoiSMSEchoue:
-        logger.exception("Échec d'envoi du SMS OTP (%s) à l'utilisateur %s", motif, utilisateur.pk)
-        raise ErreurMetier(CodeErreur.SMS_ECHEC)
+        logger.exception("Échec d'envoi du code (%s, %s) à l'utilisateur %s", motif, canal, utilisateur.pk)
+        raise ErreurMetier(CodeErreur.WHATSAPP_ECHEC if canal == Canal.WHATSAPP else CodeErreur.SMS_ECHEC)
 
 
 def _verifier_code_otp(utilisateur, motif, code):
@@ -143,7 +143,9 @@ def _citoyen_non_verifie(telephone):
     ).first()
 
 
-def inscrire_citoyen(*, telephone, nom, prenoms, password, commune, email=None, quartier_residence=None):
+def inscrire_citoyen(
+    *, telephone, nom, prenoms, password, commune, email=None, quartier_residence=None, canal=CANAL_PAR_DEFAUT
+):
     """
     Crée un compte citoyen non vérifié et envoie un code OTP.
     Un compte citoyen jamais vérifié peut être repris (ex. erreur de saisie, SMS non reçu),
@@ -180,7 +182,7 @@ def inscrire_citoyen(*, telephone, nom, prenoms, password, commune, email=None, 
         # Deux inscriptions simultanées avec le même numéro.
         raise _erreur_telephone_deja_utilise()
 
-    generer_code_otp(utilisateur, CodeOTP.Motif.INSCRIPTION)
+    generer_code_otp(utilisateur, CodeOTP.Motif.INSCRIPTION, canal)
     return utilisateur
 
 
@@ -195,14 +197,14 @@ def verifier_inscription(telephone, code):
     return utilisateur
 
 
-def renvoyer_code_inscription(telephone):
+def renvoyer_code_inscription(telephone, canal=CANAL_PAR_DEFAUT):
     """
     Renvoie un code si le numéro correspond à une inscription en attente.
     Ne signale rien sinon, pour ne pas révéler quels numéros sont inscrits.
     """
     utilisateur = _citoyen_non_verifie(telephone)
     if utilisateur is not None:
-        generer_code_otp(utilisateur, CodeOTP.Motif.INSCRIPTION)
+        generer_code_otp(utilisateur, CodeOTP.Motif.INSCRIPTION, canal)
 
 
 # ---------------------------------------------------------------------------
@@ -293,15 +295,15 @@ def _compte_a_reinitialiser(telephone=None, email=None):
     return compte if valide and compte.is_active else None
 
 
-def demander_reinitialisation(telephone=None, email=None):
+def demander_reinitialisation(telephone=None, email=None, canal=CANAL_PAR_DEFAUT):
     """
-    Envoie un code au compte : par SMS pour un citoyen, par e-mail pour la mairie et les
-    organisations. Sans effet (et sans le signaler) si aucun compte ne correspond, pour ne pas
+    Envoie un code au compte : par WhatsApp ou SMS (`canal`) pour un citoyen, par e-mail pour la
+    mairie et les organisations. Sans effet (et sans le signaler) si aucun compte ne correspond, pour ne pas
     révéler qui est inscrit.
     """
     compte = _compte_a_reinitialiser(telephone, email)
     if compte is not None:
-        generer_code_otp(compte, CodeOTP.Motif.REINITIALISATION_MDP)
+        generer_code_otp(compte, CodeOTP.Motif.REINITIALISATION_MDP, canal)
 
 
 def _valider_nouveau_mot_de_passe(password, compte):

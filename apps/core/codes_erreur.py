@@ -37,6 +37,7 @@ class CodeErreur(models.TextChoices):
     OTP_EXPIRE = "OTP_EXPIRE"
     OTP_TENTATIVES_DEPASSEES = "OTP_TENTATIVES_DEPASSEES"
     SMS_ECHEC = "SMS_ECHEC"
+    WHATSAPP_ECHEC = "WHATSAPP_ECHEC"
     EMAIL_ECHEC = "EMAIL_ECHEC"
 
     # --- Territoire ---
@@ -116,6 +117,10 @@ INFOS_ERREURS = {
     CodeErreur.SMS_ECHEC: (
         503,
         "Le SMS n'a pas pu être envoyé. Veuillez réessayer dans quelques instants.",
+    ),
+    CodeErreur.WHATSAPP_ECHEC: (
+        503,
+        "Le message WhatsApp n'a pas pu être envoyé. Réessayez ou choisissez de recevoir le code par SMS.",
     ),
     CodeErreur.COORDONNEES_HORS_COMMUNE: (
         400,

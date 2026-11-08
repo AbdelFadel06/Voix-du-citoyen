@@ -451,7 +451,7 @@ l'interface des organisations avec leur e-mail et leur mot de passe.
 Crée le compte d'un membre de l'organisation. Il se connecte tout de suite à l'interface des
 organisations avec son **e-mail** et ce mot de passe (aucun code SMS) : communiquez-le lui.
 
-- E-mail obligatoire et unique (`EMAIL_DEJA_UTILISE`), numéro béninois unique
+- E-mail obligatoire et unique (`EMAIL_DEJA_UTILISE`), numéro unique (béninois ou international)
   (`TELEPHONE_DEJA_UTILISE`).
 - Il voit les signalements du périmètre de l'organisation (ses communes et secteurs).
 {GESTION}

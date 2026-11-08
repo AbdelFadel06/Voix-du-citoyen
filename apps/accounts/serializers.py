@@ -4,6 +4,7 @@ from drf_spectacular.utils import extend_schema_field
 from phonenumber_field.serializerfields import PhoneNumberField
 from rest_framework import serializers
 
+from apps.core.sms import CANAL_PAR_DEFAUT, Canal
 from apps.referentiel.models import Secteur
 from apps.territoire.models import Commune, Quartier
 from apps.territoire.serializers import CommuneResumeSerializer
@@ -12,11 +13,22 @@ from .models import Organisation, ServiceMunicipal, Utilisateur, normaliser_emai
 
 MESSAGE_TELEPHONE_INVALIDE = "Saisissez un numéro de téléphone valide."
 AIDE_TELEPHONE = (
-    "Numéro béninois, au format national (`0197123456`) ou international (`+2290197123456`)."
+    "Numéro béninois au format national (`0197123456`), ou tout numéro au format international "
+    "avec l'indicatif du pays (`+2290197123456`, `+33612345678`…)."
 )
 AIDE_MOT_DE_PASSE = (
     "Au moins 6 caractères (lettres, chiffres ou les deux : un code à 6 chiffres convient)."
 )
+
+
+def champ_canal():
+    return serializers.ChoiceField(
+        choices=Canal.choices,
+        default=CANAL_PAR_DEFAUT,
+        help_text="Comment recevoir le code : `WHATSAPP` ou `SMS`, au choix de l'utilisateur (l'application "
+        "présélectionne WhatsApp). Absent : `SMS`, comme les versions de l'application antérieures à ce "
+        "choix. S'il ne reçoit rien, proposer l'autre canal.",
+    )
 
 
 def champ_telephone(help_text=AIDE_TELEPHONE):
@@ -208,11 +220,7 @@ class InscriptionSerializer(serializers.Serializer):
         "où la plateforme est déployée y figurent). **Obligatoire.**"
     )
     quartier_residence = champ_quartier_residence()
-
-    def validate_telephone(self, valeur):
-        if valeur.country_code != 229:
-            raise serializers.ValidationError("Saisissez un numéro de téléphone béninois (+229).")
-        return valeur
+    canal = champ_canal()
 
     def validate(self, attrs):
         utilisateur = Utilisateur(
@@ -234,12 +242,13 @@ class VerificationOTPSerializer(serializers.Serializer):
     code = serializers.RegexField(
         r"^\d{6}$",
         error_messages={"invalid": "Le code doit comporter 6 chiffres."},
-        help_text="Code à 6 chiffres reçu par SMS. Valable 10 minutes, 5 essais au maximum.",
+        help_text="Code à 6 chiffres reçu par WhatsApp, SMS ou e-mail. Valable 10 minutes, 5 essais au maximum.",
     )
 
 
 class RenvoiOTPSerializer(serializers.Serializer):
     telephone = champ_telephone("Numéro utilisé lors de l'inscription.")
+    canal = champ_canal()
 
 
 class InscriptionDonneesSerializer(serializers.Serializer):
@@ -259,7 +268,7 @@ class IdentifiantSerializer(serializers.Serializer):
     telephone = PhoneNumberField(
         required=False,
         error_messages={"invalid": MESSAGE_TELEPHONE_INVALIDE},
-        help_text="**Citoyens** : numéro de téléphone (`0197123456` ou `+2290197123456`).",
+        help_text="**Citoyens** : numéro de téléphone (`0197123456`, ou international avec l'indicatif : `+2290197123456`, `+33612345678`).",
     )
     email = serializers.EmailField(
         required=False,
@@ -286,14 +295,18 @@ class ConnexionSerializer(IdentifiantSerializer):
 
 
 class DemandeReinitialisationSerializer(IdentifiantSerializer):
-    pass
+    canal = champ_canal()
+
+    def identifiant(self):
+        # Le canal ne sert qu'aux citoyens ; la mairie et les organisations reçoivent un e-mail.
+        return {**super().identifiant(), "canal": self.validated_data["canal"]}
 
 
 class ReinitialisationSerializer(IdentifiantSerializer):
     code = serializers.RegexField(
         r"^\d{6}$",
         error_messages={"invalid": "Le code doit comporter 6 chiffres."},
-        help_text="Code à 6 chiffres reçu par SMS. Valable 10 minutes, 5 essais au maximum.",
+        help_text="Code à 6 chiffres reçu par WhatsApp, SMS ou e-mail. Valable 10 minutes, 5 essais au maximum.",
     )
     password = serializers.CharField(
         write_only=True,
@@ -491,11 +504,6 @@ class AgentCreationSerializer(_AgentEcritureSerializer):
         "de l'admin connecté.",
         required=False,
     )
-
-    def validate_telephone(self, valeur):
-        if valeur.country_code != 229:
-            raise serializers.ValidationError("Saisissez un numéro de téléphone béninois (+229).")
-        return valeur
 
 
 class AgentModificationSerializer(_AgentEcritureSerializer):
@@ -716,11 +724,6 @@ class _MembreEcritureSerializer(serializers.Serializer):
 
 class MembreCreationSerializer(_MembreEcritureSerializer):
     telephone = champ_telephone(AIDE_TELEPHONE)
-
-    def validate_telephone(self, valeur):
-        if valeur.country_code != 229:
-            raise serializers.ValidationError("Saisissez un numéro de téléphone béninois (+229).")
-        return valeur
 
 
 class MembreModificationSerializer(_MembreEcritureSerializer):

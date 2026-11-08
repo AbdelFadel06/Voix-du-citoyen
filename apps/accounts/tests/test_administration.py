@@ -124,7 +124,7 @@ class TestAgents:
         assert reponse.status_code == 409
         assert reponse.json()["erreur"]["code"] == CodeErreur.TELEPHONE_DEJA_UTILISE
 
-    @pytest.mark.parametrize("surcharges, champ", [({"mot_de_passe": "1234"}, "mot_de_passe"), ({"telephone": "+33612345678"}, "telephone")])
+    @pytest.mark.parametrize("surcharges, champ", [({"mot_de_passe": "1234"}, "mot_de_passe"), ({"telephone": "123"}, "telephone")])
     def test_donnees_invalides(self, admin, voirie, surcharges, champ):
         reponse = admin.post(URL_AGENTS, nouvel_agent(service=voirie.pk, **surcharges), format="json")
         assert champ in reponse.json()["erreur"]["details"]
