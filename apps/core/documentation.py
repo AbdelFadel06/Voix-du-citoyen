@@ -209,7 +209,7 @@ Une erreur 500 ne révèle jamais de détail technique.
   international (`+2290197123456`).
 - **Codes de vérification** : envoyés par **WhatsApp** ou par **SMS**, au choix de l'utilisateur
   (`canal` sur `/auth/register/`, `/auth/otp/resend/`, `/auth/password/reset/`) ; l'application
-  présélectionne WhatsApp. Sans `canal` : SMS, comme les versions antérieures de l'application. En cas d'échec :
+  présélectionne WhatsApp. Sans `canal` : WhatsApp. En cas d'échec :
   `WHATSAPP_ECHEC` ou `SMS_ECHEC` ; proposer alors l'autre canal.
 - **Dates** : ISO 8601 avec fuseau horaire (`2026-10-06T15:58:21+01:00`, heure de Porto-Novo).
 - **Coordonnées GPS** : degrés décimaux (WGS 84), 6 décimales.

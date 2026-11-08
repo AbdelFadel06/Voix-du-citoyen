@@ -10,9 +10,9 @@ class Canal(models.TextChoices):
     SMS = "SMS", "SMS"
 
 
-# Quand l'application ne précise pas le canal : SMS, comme avant l'ajout de WhatsApp, pour que les
-# versions déjà publiées de l'application mobile continuent de fonctionner à l'identique.
-CANAL_PAR_DEFAUT = Canal.SMS
+# Quand l'application ne précise pas le canal (versions antérieures à ce choix comprises) : WhatsApp,
+# le canal branché en premier chez NotifyHub (décidé le 2026-11-09).
+CANAL_PAR_DEFAUT = Canal.WHATSAPP
 
 
 class EnvoiSMSEchoue(Exception):

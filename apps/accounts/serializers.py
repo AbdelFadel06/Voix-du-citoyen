@@ -26,8 +26,8 @@ def champ_canal():
         choices=Canal.choices,
         default=CANAL_PAR_DEFAUT,
         help_text="Comment recevoir le code : `WHATSAPP` ou `SMS`, au choix de l'utilisateur (l'application "
-        "présélectionne WhatsApp). Absent : `SMS`, comme les versions de l'application antérieures à ce "
-        "choix. S'il ne reçoit rien, proposer l'autre canal.",
+        "présélectionne WhatsApp). Absent : `WHATSAPP` (versions de l'application antérieures à ce choix "
+        "comprises). S'il ne reçoit rien, proposer l'autre canal.",
     )
 
 

@@ -100,7 +100,7 @@ par **SMS**, au choix (`canal`). L'étape suivante est `POST /auth/otp/verify/`.
 - Numéros béninois (`0197123456`) ou de tout pays au format international (`+33612345678`).
 - `canal` : `WHATSAPP` ou `SMS`. L'application présélectionne WhatsApp et laisse l'utilisateur
   changer ; s'il ne reçoit pas le code, proposer l'autre canal avec `POST /auth/otp/resend/`.
-  **Absent : `SMS`**, pour les versions de l'application antérieures à ce choix.
+  **Absent : `WHATSAPP`** (versions de l'application antérieures à ce choix comprises).
 - Si le numéro a déjà été inscrit **sans être vérifié** (code non reçu, erreur de saisie),
   l'inscription est reprise : les informations sont remplacées et un nouveau code est envoyé.
 - Si le numéro appartient à un compte vérifié, ou à un agent ou une organisation :
@@ -341,7 +341,7 @@ L'identifiant est le même qu'à la connexion — envoyer **l'un ou l'autre** :
 
 | Compte | Identifiant | Le code arrive… |
 |---|---|---|
-| Citoyen (application mobile) | `telephone` | par **WhatsApp** ou **SMS** (`canal`, absent = SMS) |
+| Citoyen (application mobile) | `telephone` | par **WhatsApp** ou **SMS** (`canal`, absent = WhatsApp) |
 | Agent, admin mairie, organisation (application web) | `email` | par **e-mail** |
 
 **Règles**

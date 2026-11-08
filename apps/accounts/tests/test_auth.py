@@ -129,11 +129,11 @@ class TestInscription:
         assert reponse.json()["donnees"]["telephone"] == numero
         assert sms[-1].telephone == numero
 
-    def test_sans_canal_le_code_part_par_sms(self, api_client, sms):
-        # Compatibilité : l'application déjà publiée n'envoie pas `canal`.
+    def test_sans_canal_le_code_part_par_whatsapp(self, api_client, sms):
+        # L'application déjà publiée n'envoie pas `canal` : ses codes partent par WhatsApp.
         reponse = api_client.post(URL_REGISTER, donnees_inscription(), format="json")
-        assert sms[-1].canal == "SMS"
-        assert reponse.json()["message"] == "Compte créé. Un code de vérification vous a été envoyé par SMS."
+        assert sms[-1].canal == "WHATSAPP"
+        assert reponse.json()["message"] == "Compte créé. Un code de vérification vous a été envoyé par WhatsApp."
 
     def test_code_par_whatsapp(self, api_client, sms):
         reponse = api_client.post(URL_REGISTER, donnees_inscription(canal="WHATSAPP"), format="json")
